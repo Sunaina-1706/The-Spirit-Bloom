@@ -1,181 +1,462 @@
 // ═══════════════════════════════════════════════
-//  THE SPIRIT BLOOM — script.js  (v3 — with Gallery)
-//  Vanilla JS · SVG flower generator · WebLLM AI · My Blooms gallery
+//  THE SPIRIT BLOOM — script.js  (v4 — 12 Unique Species & Dynamic Engine)
+//  Vanilla JS · SVG procedural flowers · WebLLM AI · My Blooms gallery
 // ═══════════════════════════════════════════════
 
 // ──────────────────────────────────────────────
 // 1. IMPORTS
 // ──────────────────────────────────────────────
-
-// WebLLM is loaded from the jsDelivr CDN as an ES module.
-// This requires <script type="module"> in index.html.
-// The model itself (~400 MB) is downloaded once and cached by the browser.
 import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
 // ──────────────────────────────────────────────
-// 2. CONSTANTS
+// 2. CONSTANTS & APP STATE
 // ──────────────────────────────────────────────
-
-// Qwen2.5-0.5B is the smallest WebLLM model (~400 MB quantised).
-// It is flagged low_resource_required and runs on most WebGPU-capable devices.
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 
-// ──────────────────────────────────────────────
-// 3. APP STATE
-// ──────────────────────────────────────────────
-
-// Holds the loaded MLCEngine instance, or null if AI is unavailable.
 let engine = null;
+let aiMode = "loading"; // "loading" | "ai" | "fallback"
 
-// Tracks the current mode so the UI is always honest with the user.
-// "loading"  — model download / init in progress
-// "ai"       — WebLLM ready, real AI inference is available
-// "fallback" — WebLLM failed or unsupported, using sample data
-let aiMode = "loading";
+// Tracks the current memory and variation index for "Grow Another Bloom"
+let lastMemoryText = "";
+let memoryVariationIndex = 0;
+let currentFlowerData = null;
 
 // ──────────────────────────────────────────────
-// 4. SAMPLE DATA (Fallback)
+// 3. 12 FLOWER SPECIES REGISTRY
 // ──────────────────────────────────────────────
-// Used when WebLLM cannot run.  Exactly the same data as v1.
-
-const FLOWER_TEMPLATES = [
-  {
-    keywords: ["grandmother", "grandma", "abuela", "nana", "family", "ancestor"],
-    name: "La Flor de la Memoria",
-    meaning: "A flower rooted in ancestral love. It blooms between worlds, carrying the warmth of those who walked before us.",
-    poem: "She lives in the scent of warm tortillas,\nin the creak of a wooden chair.\nClose your eyes — she has never left.\nShe is the golden thread in the air.",
-    palette: { center: "#ffd700", petals: ["#f77f00", "#ff9f1c", "#ffbf69"], stem: "#4a7c59", accent: "#c77dff" }
+// Each flower species has distinct symbolic resonance, emotional keywords,
+// visual parameters, and a dedicated SVG rendering function.
+const FLOWER_SPECIES = {
+  marigold: {
+    id: "marigold",
+    displayName: "Marigold · Cempasúchil",
+    symbolism: "Remembrance and warmth",
+    meaningDefault: "A golden marigold rooted in ancestral tradition. Its fragrant, sunlit petals form a luminous pathway guiding cherished memories and wandering spirits back into our hearts.",
+    keywords: [
+      "grandmother", "grandma", "abuela", "nana", "grandfather", "grandpa", "abuelo", "ancestor",
+      "altar", "ofrenda", "candle", "marigold", "cempasuchil", "family", "tradition", "warmth",
+      "reunion", "roots", "remembrance", "remember", "heritage", "golden", "home", "scent"
+    ],
+    defaultPalette: {
+      center: "#7a1a00",
+      petals: ["#d9480f", "#f77f00", "#ffd166"],
+      accent: "#ffe066",
+      stem: "#386641"
+    },
+    defaultPetals: 14
   },
-  {
-    keywords: ["dream", "night", "sleep", "stars", "sky", "moon", "float"],
-    name: "Flor del Sueño Eterno",
-    meaning: "Born from the quiet hours between midnight and dawn. This flower holds your unconscious wanderings like a lantern in the dark.",
-    poem: "In the dream you were weightless,\nthe moon a silver door.\nYou stepped through and came back different —\ncarrying light from the other shore.",
-    palette: { center: "#c77dff", petals: ["#7b2fbe", "#9d4edd", "#c77dff"], stem: "#2d1b69", accent: "#ffd700" }
+  rose: {
+    id: "rose",
+    displayName: "Rose · Rosa Sagrada",
+    symbolism: "Love and longing",
+    meaningDefault: "An impassioned bloom holding the tenderness of whispered promises, romantic yearning, and devotion that endures across oceans of time.",
+    keywords: [
+      "love", "romance", "beloved", "heart", "longing", "kiss", "yearning", "miss", "passion",
+      "sweetheart", "darling", "partner", "lover", "devotion", "sweet", "holding", "tender",
+      "embrace", "forever", "vow", "rose", "touch"
+    ],
+    defaultPalette: {
+      center: "#ff4d6d",
+      petals: ["#800f2f", "#c9184a", "#ff758f"],
+      accent: "#ffd700",
+      stem: "#2d5a3f"
+    },
+    defaultPetals: 12
   },
-  {
-    keywords: ["love", "heart", "miss", "longing", "yearning", "beloved", "dear"],
-    name: "Rosa del Corazón Partido",
-    meaning: "Tenderness turned into colour. This flower grows in the space between closeness and distance, between saying goodbye and holding on.",
-    poem: "Love doesn't vanish — it transforms.\nIt becomes the hum you can't place,\nthe warmth on an empty chair,\na flower growing in the space.",
-    palette: { center: "#ff4d6d", petals: ["#c9184a", "#ff6b6b", "#ffb3c1"], stem: "#4a7c59", accent: "#ffd700" }
+  moonflower: {
+    id: "moonflower",
+    displayName: "Moonflower · Flor de Luna",
+    symbolism: "Mystery and dreams",
+    meaningDefault: "Unfolding only beneath velvet night skies and silent stars. It preserves unconscious wanderings, midnight secrets, and cosmic reverie like a beacon in the shadow.",
+    keywords: [
+      "dream", "night", "stars", "moon", "midnight", "sleep", "mystery", "astral", "floating",
+      "sky", "twilight", "visions", "secret", "cosmic", "nocturnal", "lunar", "wonder", "shadows",
+      "lucid", "galaxy", "silver"
+    ],
+    defaultPalette: {
+      center: "#ffffff",
+      petals: ["#3c096c", "#7b2cbf", "#c77dff"],
+      accent: "#e0aaff",
+      stem: "#240046"
+    },
+    defaultPetals: 5
   },
-  {
-    keywords: ["father", "dad", "papa", "papá", "brother", "son", "uncle"],
-    name: "El Cempasúchil del Hombre Fuerte",
-    meaning: "Marigold-gold, sun-drenched. It honours those who carried weight in silence and showed love through presence, not words.",
-    poem: "He taught me to hold a hammer,\nand how to let a storm pass.\nI keep him in the smell of wood shavings\nand the morning light on glass.",
-    palette: { center: "#f77f00", petals: ["#e65c00", "#f77f00", "#ffa952"], stem: "#5a4a28", accent: "#ffd700" }
+  bluebell: {
+    id: "bluebell",
+    displayName: "Bluebell · Campanilla Silvestre",
+    symbolism: "Nostalgia and humility",
+    meaningDefault: "Softly chiming in gentle woodland breezes, carrying the quiet hum of simpler days, innocent laughter, and the humble grace of memories kept in secret.",
+    keywords: [
+      "nostalgia", "humility", "innocence", "woods", "forest", "gentle", "whisper", "echo",
+      "bell", "chime", "quiet", "childhood", "playground", "old days", "humble", "soft",
+      "breeze", "moss", "past", "bluebell"
+    ],
+    defaultPalette: {
+      center: "#48cae4",
+      petals: ["#023e8a", "#0077b6", "#90e0ef"],
+      accent: "#caf0f8",
+      stem: "#2d6a4f"
+    },
+    defaultPetals: 5
   },
-  {
-    keywords: ["sad", "grief", "loss", "gone", "death", "died", "cry", "tears", "pain"],
-    name: "La Flor del Duelo Sagrado",
-    meaning: "Grief made visible. Dark petals that still hold light — because mourning is not the absence of love. It is love with nowhere to go.",
-    poem: "Grief is not a wound to close.\nIt is the shape of what was there.\nLet it stay — let it bloom in you.\nThe dead live in the ones who care.",
-    palette: { center: "#9d4edd", petals: ["#1e0d2e", "#4a1a6e", "#7b2fbe"], stem: "#2a1a3e", accent: "#ff9f1c" }
+  sunflower: {
+    id: "sunflower",
+    displayName: "Sunflower · Girasol Radiante",
+    symbolism: "Joy and hope",
+    meaningDefault: "Turning faithfully toward warmth and joy. A triumphant declaration of radiant energy, golden laughter, and resilience that banishes every encroaching shadow.",
+    keywords: [
+      "joy", "happy", "sunshine", "hope", "bright", "laugh", "smile", "cheer", "summer",
+      "radiant", "play", "light", "energy", "optimism", "celebrate", "dancing", "fun",
+      "sun", "warm", "field", "gleam"
+    ],
+    defaultPalette: {
+      center: "#3d1308",
+      petals: ["#e85d04", "#faa307", "#ffdd00"],
+      accent: "#fff3b0",
+      stem: "#406a38"
+    },
+    defaultPetals: 24
   },
-  {
-    keywords: ["joy", "happy", "celebration", "dance", "laugh", "music", "bright"],
-    name: "Flor de la Alegría Viva",
-    meaning: "Pure, unfiltered joy crystallised into petals. This flower reminds you that happiness is also a form of remembrance.",
-    poem: "I heard your laugh and time stopped.\nThe room was full of golden sound.\nI am still standing in that moment —\neven now, even here, I'm spellbound.",
-    palette: { center: "#ffd700", petals: ["#f77f00", "#ffb347", "#ffe066"], stem: "#4a7c59", accent: "#c77dff" }
+  lavender: {
+    id: "lavender",
+    displayName: "Lavender · Lavanda Serena",
+    symbolism: "Peace and healing",
+    meaningDefault: "Brimming with soothing herbal tranquility. It gently mends frayed spirits, quietens tempestuous thoughts, and wraps the soul in comforting stillness.",
+    keywords: [
+      "peace", "calm", "healing", "rest", "soothing", "stillness", "safe", "breath", "serenity",
+      "comfort", "relax", "tranquil", "quiet", "sleep", "recovery", "mending", "silent",
+      "solace", "softness", "gentle"
+    ],
+    defaultPalette: {
+      center: "#dec9e9",
+      petals: ["#5a189a", "#7b2cbf", "#b5a6c9"],
+      accent: "#e2afff",
+      stem: "#4a7c59"
+    },
+    defaultPetals: 16
   },
-  {
-    keywords: ["childhood", "child", "young", "little", "home", "house", "place"],
-    name: "La Flor de la Infancia",
-    meaning: "A tender bloom. It carries the smell of rain on warm earth, the echoes of small feet, and the invincibility of youth.",
-    poem: "I was small and the world was wide.\nThe garden seemed a continent.\nNow I am the garden —\nand still that child, still innocent.",
-    palette: { center: "#ffb347", petals: ["#ff9f1c", "#ffd166", "#ffb3c1"], stem: "#5a9e6f", accent: "#c77dff" }
+  white_lily: {
+    id: "white_lily",
+    displayName: "White Lily · Lirio de Gracia",
+    symbolism: "Purity and remembrance",
+    meaningDefault: "An immaculate bloom consecrated to sacred farewells and solemn dignity. It honors departed souls with serene grace, forgiving what was broken and sanctifying what remains.",
+    keywords: [
+      "grief", "loss", "funeral", "passing", "died", "death", "soul", "purity", "farewell",
+      "heaven", "angel", "solemn", "tears", "mourning", "crying", "passed", "gone", "honor",
+      "sanctuary", "grace", "rest in peace"
+    ],
+    defaultPalette: {
+      center: "#d8f3dc",
+      petals: ["#95a5a6", "#ecf0f1", "#ffffff"],
+      accent: "#e9c46a",
+      stem: "#406343"
+    },
+    defaultPetals: 6
   },
-  // Default fallback — used when no keywords match
-  {
-    keywords: [],
-    name: "La Flor Sin Nombre",
-    meaning: "Some feelings are too vast for words. This flower grew from the silence between what you meant to say and what remained in your heart.",
-    poem: "There are blooms that have no name,\nonly colour and soft perfume.\nThey grow between the spoken words\nand bloom best in the half-light of a room.",
-    palette: { center: "#c77dff", petals: ["#7b2fbe", "#c77dff", "#f77f00"], stem: "#3a2a5e", accent: "#ffd700" }
+  cherry_blossom: {
+    id: "cherry_blossom",
+    displayName: "Cherry Blossom · Flor de Cerezo",
+    symbolism: "Fleeting moments and change",
+    meaningDefault: "Exquisitely delicate and brief, celebrating the bittersweet beauty of impermanence. It marks growing up, drifting seasons, and milestones that shimmer before fading into history.",
+    keywords: [
+      "change", "growing", "fleeting", "passage", "impermanence", "moment", "spring", "graduation",
+      "youth", "time", "transition", "drifting", "ephemeral", "temporary", "leaving", "goodbye",
+      "new chapter", "growth", "season"
+    ],
+    defaultPalette: {
+      center: "#d62828",
+      petals: ["#f72585", "#ff70a6", "#ffccd5"],
+      accent: "#ffd166",
+      stem: "#583101"
+    },
+    defaultPetals: 5
+  },
+  forget_me_not: {
+    id: "forget_me_not",
+    displayName: "Forget-me-not · No Me Olvides",
+    symbolism: "Cherished memories",
+    meaningDefault: "Modest yet indelible. A steadfast promise that true companionship, shared secrets, and cherished memories remain alive across any span of distance or silence.",
+    keywords: [
+      "cherished", "promise", "friend", "friendship", "never", "remember", "keepsake",
+      "treasured", "bond", "forever", "distance", "unforgettable", "classmate", "companion",
+      "photo", "trinket", "token", "pledge"
+    ],
+    defaultPalette: {
+      center: "#ffd166",
+      petals: ["#0077b6", "#00b4d8", "#90e0ef"],
+      accent: "#ffffff",
+      stem: "#386641"
+    },
+    defaultPetals: 5
+  },
+  nightshade: {
+    id: "nightshade",
+    displayName: "Nightshade Fantasy · Sombra Mística",
+    symbolism: "Mystery and transformation",
+    meaningDefault: "A strange and magnetic bloom thriving on threshold realms. It transmutes painful truths, secret transformations, and shadows into radiant personal power.",
+    keywords: [
+      "transformation", "magic", "strangeness", "shadow", "rebirth", "alchemy", "secret",
+      "deep", "dark", "unknown", "hidden", "weird", "uncanny", "change", "goth", "witch",
+      "spell", "intensity", "unusual", "enchanted"
+    ],
+    defaultPalette: {
+      center: "#ffd000",
+      petals: ["#10002b", "#3c096c", "#7b2cbf"],
+      accent: "#00f5d4",
+      stem: "#1b263b"
+    },
+    defaultPetals: 5
+  },
+  ghost_orchid: {
+    id: "ghost_orchid",
+    displayName: "Ghost Orchid · Orquídea Fantasma",
+    symbolism: "Solitude and the unknown",
+    meaningDefault: "Suspended in pure wilderness without conventional soil, an elusive phantom bloom. It sings of introspective solitude, holy silence, and navigating uncharted inner spaces.",
+    keywords: [
+      "solitude", "lonely", "alone", "unknown", "wilderness", "quiet", "isolated", "silence",
+      "phantom", "ghost", "strange", "wanderer", "untouched", "distant", "introvert",
+      "independent", "solitary", "hidden", "fog", "mist"
+    ],
+    defaultPalette: {
+      center: "#d8f3dc",
+      petals: ["#52b788", "#b7e4c7", "#f8f9fa"],
+      accent: "#95d5b2",
+      stem: "#2d6a4f"
+    },
+    defaultPetals: 5
+  },
+  crimson_dahlia: {
+    id: "crimson_dahlia",
+    displayName: "Crimson Dahlia · Dalia de Fuego",
+    symbolism: "Strength and resilience",
+    meaningDefault: "Crowned with intricate concentric armor of scarlet and flame. It honors fierce endurance through adversity, triumph forged in struggle, and unbreakable inner fire.",
+    keywords: [
+      "strength", "resilience", "overcoming", "hardship", "battle", "courage", "trial", "survive",
+      "fire", "fierce", "perseverance", "strong", "brave", "healing", "injury", "struggle",
+      "triumph", "conquer", "stand", "powerful", "pain"
+    ],
+    defaultPalette: {
+      center: "#370617",
+      petals: ["#6a040f", "#9d0208", "#dc2f02"],
+      accent: "#ffba08",
+      stem: "#386641"
+    },
+    defaultPetals: 32
   }
-];
+};
+
+const SPECIES_KEYS = Object.keys(FLOWER_SPECIES);
 
 // ──────────────────────────────────────────────
-// 5. FALLBACK — keyword-based template picker
+// 4. EMOTIONAL MEMORY ANALYZER & VARIATION SELECTION
 // ──────────────────────────────────────────────
 
 /**
- * Picks the best matching fallback template for the given text.
+ * Analyzes the user's memory, ranks suitable flower species,
+ * and uses the variationIndex to return a distinct candidate.
  * @param {string} text
- * @returns {object}
+ * @param {number} variationIndex
+ * @returns {object} Selected flower species configuration
  */
-function pickFallbackTemplate(text) {
+function analyzeMemoryAndSelectSpecies(text, variationIndex = 0) {
   const lower = text.toLowerCase();
-  let bestScore = 0;
-  let best = FLOWER_TEMPLATES[FLOWER_TEMPLATES.length - 1];
 
-  for (let i = 0; i < FLOWER_TEMPLATES.length - 1; i++) {
+  // Score each flower species based on keyword occurrences and context
+  const scored = SPECIES_KEYS.map((key) => {
+    const spec = FLOWER_SPECIES[key];
     let score = 0;
-    FLOWER_TEMPLATES[i].keywords.forEach(function (kw) {
-      if (lower.includes(kw)) score++;
+    spec.keywords.forEach((kw) => {
+      if (lower.includes(kw)) {
+        score += kw.length > 5 ? 3 : 2; // longer matches have higher weight
+      }
     });
-    if (score > bestScore) {
-      bestScore = score;
-      best = FLOWER_TEMPLATES[i];
+    return { key, score, spec };
+  });
+
+  // Sort descending by score
+  scored.sort((a, b) => b.score - a.score);
+
+  // If no keywords matched, use a text-hash based selection
+  if (scored[0].score === 0) {
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = (hash << 5) - hash + text.charCodeAt(i);
+      hash |= 0;
     }
+    const offset = Math.abs(hash + variationIndex) % SPECIES_KEYS.length;
+    return FLOWER_SPECIES[SPECIES_KEYS[offset]];
   }
 
-  if (bestScore === 0) {
-    best = FLOWER_TEMPLATES[Math.floor(Math.random() * (FLOWER_TEMPLATES.length - 1))];
-  }
-  return best;
+  // Filter top tier candidates (at least 50% of the top score)
+  const topScore = scored[0].score;
+  const candidates = scored.filter((s) => s.score >= Math.max(2, topScore * 0.5));
+
+  // Use variationIndex to cycle gracefully among top candidate species
+  const selectedIdx = Math.abs(variationIndex) % candidates.length;
+  return candidates[selectedIdx].spec;
 }
 
 // ──────────────────────────────────────────────
-// 6. AI PROMPT & JSON PARSING
+// 5. DYNAMIC NAME & POEM GENERATION ENGINE
 // ──────────────────────────────────────────────
 
 /**
- * Builds the system prompt that tells the model what JSON to return.
- * Keeping the prompt tight reduces token usage for the small model.
+ * Generates an evocative original name for the flower based on species, memory theme, and variation.
  */
+function generateDynamicFlowerName(species, text, variationIndex) {
+  const prefixes = {
+    marigold: ["Cempasúchil", "Flor de Oro", "Flor de los Abuelos", "Cempasúchil Dorado", "Luz de la Memoria"],
+    rose: ["Rosa del Amor", "Rosa Escarlata", "Rosa de las Promesas", "Rosa del Corazón", "Rosa de los Suspiros"],
+    moonflower: ["Flor de Luna", "Manto Astral", "Flor del Cielo Nocturno", "Lirio de Medianoche", "Aura Lunar"],
+    bluebell: ["Campanilla Azul", "Campana del Bosque", "Flor de la Nostalgia", "Campanilla Silvestre", "Eco de la Infancia"],
+    sunflower: ["Girasol del Alba", "Girasol Radiante", "Flor del Sol Vivo", "Rayo Dorado", "Girasol de la Esperanza"],
+    lavender: ["Lavanda Serena", "Espiga del Alivio", "Lavanda de la Paz", "Bálsamo del Silencio", "Lavanda del Sosiego"],
+    white_lily: ["Lirio de Gracia", "Lirio del Sagrado Descanso", "Flor del Adiós", "Lirio de Luz Pura", "Lirio Blanco de la Paz"],
+    cherry_blossom: ["Flor de Cerezo", "Pétalo del Tiempo", "Sakura de la Despedida", "Flor del Cambio", "Brisa de Primavera"],
+    forget_me_not: ["No Me Olvides", "Flor de la Amistad Eterna", "Estrella Azul de la Memoria", "Lazo Inolvidable", "No Me Olvides Sagrado"],
+    nightshade: ["Sombra Encantada", "Solanácea Mística", "Estrella del Misterio", "Flor de las Sombras", "Pétalo Arcano"],
+    ghost_orchid: ["Orquídea Fantasma", "Flor de la Soledad", "Orquídea Espectral", "Espíritu del Bosque", "Orquídea de Niebla"],
+    crimson_dahlia: ["Dalia de Fuego", "Dalia Resiliente", "Flor del Coraje", "Dalia del Fénix", "Dalia de la Fiera Esperanza"]
+  };
+
+  const suffixes = [
+    "del Recuerdo Sagrado",
+    "de los Días Dorados",
+    "de la Tierra Amada",
+    "del Alma Eterna",
+    "de la Promesa Viva",
+    "del Silencio Iluminado",
+    "del Fuego Interior",
+    "de las Aguas Serenas"
+  ];
+
+  const pool = prefixes[species.id] || ["Flor del Espíritu"];
+  const prefix = pool[(text.length + variationIndex) % pool.length];
+  const suffix = suffixes[(text.charCodeAt(0) + variationIndex) % suffixes.length];
+
+  return `${prefix} ${suffix}`;
+}
+
+/**
+ * Dynamically composes a personalized 4-line poem tailored to the memory context and chosen flower.
+ */
+function generateDynamicPoem(species, text, variationIndex) {
+  const lower = text.toLowerCase();
+
+  // Pick emotional tone
+  let tone = "memory";
+  if (lower.includes("love") || lower.includes("kiss") || lower.includes("heart")) tone = "love";
+  else if (lower.includes("died") || lower.includes("loss") || lower.includes("grief") || lower.includes("funeral")) tone = "grief";
+  else if (lower.includes("dream") || lower.includes("night") || lower.includes("star") || lower.includes("sky")) tone = "dream";
+  else if (lower.includes("sun") || lower.includes("happy") || lower.includes("laugh") || lower.includes("joy")) tone = "joy";
+  else if (lower.includes("peace") || lower.includes("calm") || lower.includes("safe") || lower.includes("quiet")) tone = "peace";
+  else if (lower.includes("change") || lower.includes("grow") || lower.includes("left") || lower.includes("time")) tone = "change";
+  else if (lower.includes("alone") || lower.includes("silent") || lower.includes("dark")) tone = "solitude";
+  else if (lower.includes("fight") || lower.includes("pain") || lower.includes("survive") || lower.includes("strong")) tone = "strength";
+
+  // Stanza library mapped by tone and flower
+  const poems = {
+    love: [
+      "Love does not vanish into the past,\nIt gathers where the petals gleam.\nA quiet oath made to outlast\nThe waking day, the sweetest dream.",
+      "In every petal pressed in red,\nYour laughter lingers soft and clear.\nNothing is lost that once was said\nWith all the devotion held right here."
+    ],
+    grief: [
+      "Grief is but love with nowhere left to hide,\nSo here it blooms in holy white.\nAcross the veil, across the tide,\nYour memory remains my light.",
+      "A silent taper burning low,\nA fragrant blossom in the dark.\nThe ones we loved will never go;\nThey live within this golden spark."
+    ],
+    dream: [
+      "Beneath the silver canopy of sleep,\nThe quiet constellations turn.\nWhat midnight promised you to keep,\nThese starry velvet petals learn.",
+      "You walked through doors of mist and stone,\nAnd woke with starlight on your hands.\nA secret bloom you call your own\nNow rooted where the spirit stands."
+    ],
+    joy: [
+      "Golden as noon and free as air,\nYour happiness refused to fade.\nIt left its radiance everywhere,\nIn every dancing sunlit shade.",
+      "A sudden laugh, a golden song,\nA summer afternoon of play.\nThis cheerful bloom has waited long\nTo turn your darkness into day."
+    ],
+    peace: [
+      "Let every troubled tremor cease,\nThe world is gentle once again.\nA quiet fragrance breathing peace\nAcross the hills, beyond the pain.",
+      "Breathe in the evening's velvet calm,\nThe storms have spent their bitter rain.\nThis blossom brings its soothing balm\nTo heal what will not hurt again."
+    ],
+    change: [
+      "The seasons drift on tender wind,\nWhat once was budding now has grown.\nNo fleeting hour was left behind;\nIts beauty was your very own.",
+      "The petal falls so fruit may rise,\nEach ending brings a morning new.\nBehold through ever-changing eyes\nThe garden blooming deep in you."
+    ],
+    strength: [
+      "Through winter frost and cutting wire,\nYou kept the ember burning bright.\nThis dahlia crowns your inner fire\nWith fierce and unrelenting light.",
+      "What sought to break you gave you root,\nYou rose against the bitter wind.\nNow every struggle bears its fruit;\nThe triumph has at last begun."
+    ],
+    solitude: [
+      "In sacred wilderness afar,\nWhere nobody has tracked the ground,\nYou shine beside a quiet star\nWhere perfect peacefulness is found.",
+      "Unseen, untouchable, and rare,\nA phantom petal in the gloom.\nYou do not need the crowded square\nTo claim your majesty and bloom."
+    ],
+    memory: [
+      "A memory leaves its fragrant trace\nIn quiet hours of afternoon.\nA golden flower in this place\nBeneath the watchful spirit moon.",
+      "Between the spoken words and thought,\nA silent petal gently grew.\nOf all the wonders time has brought,\nThe deepest remains kept in you."
+    ]
+  };
+
+  const pool = poems[tone] || poems.memory;
+  const choice = pool[(variationIndex + text.length) % pool.length];
+  return choice;
+}
+
+// ──────────────────────────────────────────────
+// 6. LOCAL FALLBACK GENERATOR (Deterministic & Rich)
+// ──────────────────────────────────────────────
+
+/**
+ * Creates a complete flower template using local emotional analysis,
+ * custom dynamic names, and dynamic poems.
+ */
+function createLocalFlower(text, variationIndex = 0) {
+  const species = analyzeMemoryAndSelectSpecies(text, variationIndex);
+  const name = generateDynamicFlowerName(species, text, variationIndex);
+  const poem = generateDynamicPoem(species, text, variationIndex);
+
+  // Slightly vary the palette based on text seed
+  const palette = JSON.parse(JSON.stringify(species.defaultPalette));
+
+  return {
+    flowerType: species.id,
+    speciesTitle: species.displayName,
+    name: name,
+    meaning: species.meaningDefault,
+    poem: poem,
+    palette: palette,
+    petalCountOverride: species.defaultPetals
+  };
+}
+
+// ──────────────────────────────────────────────
+// 7. AI PROMPT & JSON PARSING (WebLLM)
+// ──────────────────────────────────────────────
+
 function buildSystemPrompt() {
-  return `You are a poetic AI that turns personal memories into symbolic flowers inspired by Día de los Muertos and remembrance.
+  return `You are a poetic spirit botanist for The Spirit Bloom (Día de los Muertos celebration).
+Transform the user's memory into an original digital flower.
 
-When given a memory or feeling, respond with ONLY a valid JSON object — no extra text, no markdown fences.
-
-The JSON must have exactly these keys:
+Respond ONLY with valid JSON (no markdown formatting, no code fences):
 {
-  "flower_name": "A beautiful name in Spanish or a blend of Spanish and English (string)",
-  "emotional_meaning": "2–3 sentences describing the emotional symbolism of this flower (string)",
-  "mood": "one word, e.g. grief, joy, longing, peace, wonder, love (string)",
-  "petal_color_1": "a CSS hex color for the darkest petal tone, e.g. #c9184a (string)",
-  "petal_color_2": "a CSS hex color for the mid petal tone (string)",
-  "petal_color_3": "a CSS hex color for the lightest petal tone (string)",
-  "center_color": "a CSS hex color for the flower centre, e.g. #ffd700 (string)",
-  "accent_color": "a CSS hex color for the inner accent petals (string)",
-  "stem_color": "a CSS hex color for the stem and leaves (string)",
-  "petal_count": "an integer between 6 and 12 (number)",
-  "poem": "A short original poem of 4 lines inspired by the memory. Use \\n between lines (string)"
+  "flower_type": "one of: marigold, rose, moonflower, bluebell, sunflower, lavender, white_lily, cherry_blossom, forget_me_not, nightshade, ghost_orchid, crimson_dahlia",
+  "flower_name": "Evocative poetic name in Spanish or Spanish/English",
+  "emotional_meaning": "2-3 poetic sentences on how this flower reflects the memory",
+  "mood": "e.g. warmth, longing, wonder, peace, resilience, nostalgia, reverence",
+  "petal_color_1": "hex color for dark petal tone (e.g. #c9184a)",
+  "petal_color_2": "hex color for mid petal tone",
+  "petal_color_3": "hex color for bright petal highlight",
+  "center_color": "hex color for center",
+  "accent_color": "hex color for inner details",
+  "stem_color": "hex color for stem",
+  "petal_count": 8,
+  "poem": "An original 4-line poem interpreting the memory. Use \\n between lines."
+}`;
 }
 
-Choose colours that match the emotional tone. Grief → deep purples and blues. Joy → bright golds and oranges. Love → warm pinks and reds. Dream → violet and silver. Nature memories → greens and gold.`;
-}
-
-/**
- * Tries to extract and parse a JSON object from the model's raw output.
- * Handles cases where the model wraps the JSON in markdown fences.
- * @param {string} raw  - The model's raw text response.
- * @returns {object|null} Parsed object, or null if parsing failed.
- */
 function extractJSON(raw) {
-  // Strip markdown code fences if present
   let cleaned = raw.trim();
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-
-  // Find the first { and last } — robust to leading/trailing prose
   const start = cleaned.indexOf("{");
-  const end   = cleaned.lastIndexOf("}");
+  const end = cleaned.lastIndexOf("}");
   if (start === -1 || end === -1) return null;
-
   try {
     return JSON.parse(cleaned.slice(start, end + 1));
   } catch {
@@ -183,16 +464,7 @@ function extractJSON(raw) {
   }
 }
 
-/**
- * Validates the parsed AI JSON and normalises it into the shape
- * that displayFlower() and generateFlowerSVG() expect.
- * Falls back to sensible defaults for any missing / malformed fields.
- * @param {object} data - Parsed JSON from the model.
- * @param {string} inputText - The user's original text.
- * @returns {object} A normalised flower template object.
- */
 function normaliseAIResponse(data, inputText) {
-  // Helper: return val if it looks like a CSS hex colour, else fallback
   function hexOrDefault(val, fallback) {
     if (typeof val === "string" && /^#[0-9a-fA-F]{3,8}$/.test(val.trim())) {
       return val.trim();
@@ -200,359 +472,1258 @@ function normaliseAIResponse(data, inputText) {
     return fallback;
   }
 
-  // Helper: clamp petal count to 6–12
-  function clampPetals(val) {
-    const n = parseInt(val, 10);
-    if (isNaN(n)) return 6 + (inputText.length % 7);
-    return Math.max(6, Math.min(12, n));
+  // Validate flower_type against the 12 supported species
+  let type = "marigold";
+  if (typeof data.flower_type === "string") {
+    const rawType = data.flower_type.toLowerCase().trim().replace(/[-\s]/g, "_");
+    if (SPECIES_KEYS.includes(rawType)) {
+      type = rawType;
+    } else {
+      // Find closest match
+      const matched = SPECIES_KEYS.find((k) => rawType.includes(k) || k.includes(rawType));
+      if (matched) type = matched;
+    }
   }
 
+  const spec = FLOWER_SPECIES[type] || FLOWER_SPECIES.marigold;
+
   return {
-    // Text fields
-    name:    (typeof data.flower_name === "string" && data.flower_name.trim())
-               ? data.flower_name.trim()
-               : "La Flor del Espíritu",
-
+    flowerType: type,
+    speciesTitle: spec.displayName,
+    name: (typeof data.flower_name === "string" && data.flower_name.trim())
+      ? data.flower_name.trim()
+      : generateDynamicFlowerName(spec, inputText, 0),
     meaning: (typeof data.emotional_meaning === "string" && data.emotional_meaning.trim())
-               ? data.emotional_meaning.trim()
-               : "A flower born from the depths of feeling.",
-
-    poem:    (typeof data.poem === "string" && data.poem.trim())
-               ? data.poem.trim().replace(/\\n/g, "\n")
-               : "A bloom without words,\nonly colour and grace.\nIt rises from memory\nand rests in this place.",
-
-    // Palette (passed directly to generateFlowerSVG)
+      ? data.emotional_meaning.trim()
+      : spec.meaningDefault,
+    poem: (typeof data.poem === "string" && data.poem.trim())
+      ? data.poem.trim().replace(/\\n/g, "\n")
+      : generateDynamicPoem(spec, inputText, 0),
     palette: {
       petals: [
-        hexOrDefault(data.petal_color_1, "#7b2fbe"),
-        hexOrDefault(data.petal_color_2, "#c77dff"),
-        hexOrDefault(data.petal_color_3, "#f77f00"),
+        hexOrDefault(data.petal_color_1, spec.defaultPalette.petals[0]),
+        hexOrDefault(data.petal_color_2, spec.defaultPalette.petals[1]),
+        hexOrDefault(data.petal_color_3, spec.defaultPalette.petals[2])
       ],
-      center: hexOrDefault(data.center_color, "#ffd700"),
-      accent: hexOrDefault(data.accent_color, "#c77dff"),
-      stem:   hexOrDefault(data.stem_color,   "#4a7c59"),
+      center: hexOrDefault(data.center_color, spec.defaultPalette.center),
+      accent: hexOrDefault(data.accent_color, spec.defaultPalette.accent),
+      stem: hexOrDefault(data.stem_color, spec.defaultPalette.stem)
     },
-
-    // Pass petal count separately — generateFlowerSVG reads inputText length by default,
-    // but we override it here with the AI's choice.
-    petalCountOverride: clampPetals(data.petal_count),
+    petalCountOverride: parseInt(data.petal_count, 10) || spec.defaultPetals
   };
 }
 
 // ──────────────────────────────────────────────
-// 7. WEBLLM — INITIALISE
+// 8. WEBLLM ENGINE INIT & INFERENCE
 // ──────────────────────────────────────────────
 
-/**
- * Loads the WebLLM engine.  Updates the AI status banner and progress bar
- * as the model downloads.  Sets aiMode to "ai" or "fallback" when done.
- */
 async function initWebLLM() {
-  // Check WebGPU support before attempting to load
   if (!navigator.gpu) {
-    setAIStatus("fallback", "WebGPU not supported in this browser — using built-in flower library.");
+    setAIStatus("fallback", "WebGPU not available — using built-in flower collection.");
     return;
   }
 
-  // Show the progress UI
-  const progressWrap  = document.getElementById("model-progress-wrap");
-  const progressBar   = document.getElementById("model-progress-bar");
+  const progressWrap = document.getElementById("model-progress-wrap");
+  const progressBar = document.getElementById("model-progress-bar");
   const progressLabel = document.getElementById("model-progress-label");
-  const progressTrack = progressWrap.querySelector(".model-progress-track");
+  const progressTrack = progressWrap ? progressWrap.querySelector(".model-progress-track") : null;
 
-  progressWrap.hidden = false;
+  if (progressWrap) progressWrap.hidden = false;
   setAIStatus("loading", "Summoning the spirit intelligence…");
 
   try {
     engine = await CreateMLCEngine(MODEL_ID, {
-      // Called repeatedly during model download with progress info
       initProgressCallback: function (report) {
-        // report.progress is a number 0–1; report.text is a human-readable string
         const pct = Math.round((report.progress || 0) * 100);
-        progressBar.style.width = pct + "%";
-        progressTrack.setAttribute("aria-valuenow", pct);
-        progressLabel.textContent = report.text || "Loading model…";
-      },
+        if (progressBar) progressBar.style.width = pct + "%";
+        if (progressTrack) progressTrack.setAttribute("aria-valuenow", pct);
+        if (progressLabel) progressLabel.textContent = report.text || "Loading model…";
+      }
     });
 
-    // Success
-    engine = engine;          // keep reference in module scope
-    progressWrap.hidden = true;
-    setAIStatus("ai", "✦ Local AI active — your memories never leave this device.");
-    document.getElementById("privacy-notice").hidden = false;
-
+    if (progressWrap) progressWrap.hidden = true;
+    setAIStatus("ai", "✦ Local AI active — 12 flower species interpreted on-device.");
+    const privNotice = document.getElementById("privacy-notice");
+    if (privNotice) privNotice.hidden = false;
   } catch (err) {
-    // Model failed to load — fall back gracefully
-    console.error("[SpiritBloom] WebLLM load error:", err);
-    progressWrap.hidden = true;
+    console.warn("[SpiritBloom] WebLLM load error:", err);
+    if (progressWrap) progressWrap.hidden = true;
     engine = null;
-    setAIStatus("fallback", "AI model could not load — using built-in flower library instead.");
+    setAIStatus("fallback", "AI model unavailable — using built-in 12 flower collection.");
   }
 }
 
-// ──────────────────────────────────────────────
-// 8. WEBLLM — RUN INFERENCE
-// ──────────────────────────────────────────────
-
-/**
- * Sends the user's memory to the local AI and returns a normalised
- * flower template object.  Throws if inference fails.
- * @param {string} text - The user's memory text.
- * @returns {Promise<object>} Normalised flower template.
- */
 async function runAIInference(text) {
   const response = await engine.chat.completions.create({
     messages: [
       { role: "system", content: buildSystemPrompt() },
-      { role: "user",   content: `Here is my memory:\n\n"${text}"\n\nPlease create a flower for it.` },
+      { role: "user", content: `Memory:\n"${text}"\n\nChoose the best matching flower species among the 12 and return the JSON.` }
     ],
-    temperature: 0.85,   // a little creative
-    max_tokens:  512,    // enough for the JSON + poem
-    // Ask WebLLM to force JSON output (supported in v0.2.x+)
-    response_format: { type: "json_object" },
+    temperature: 0.85,
+    max_tokens: 512,
+    response_format: { type: "json_object" }
   });
 
-  const raw  = response.choices[0].message.content || "";
+  const raw = response.choices[0].message.content || "";
   const data = extractJSON(raw);
-
-  if (!data) {
-    throw new Error("Model returned non-JSON output: " + raw.slice(0, 200));
-  }
-
+  if (!data) throw new Error("Model returned invalid JSON format.");
   return normaliseAIResponse(data, text);
 }
 
-// ──────────────────────────────────────────────
-// 9. UI — AI STATUS BANNER
-// ──────────────────────────────────────────────
-
-/**
- * Updates the AI status banner text and visual style.
- * @param {"loading"|"ai"|"fallback"} mode
- * @param {string} message
- */
 function setAIStatus(mode, message) {
   aiMode = mode;
+  const banner = document.getElementById("ai-status-banner");
+  if (!banner) return;
+  const text = document.getElementById("ai-status-text");
+  const iconEl = banner.querySelector(".ai-banner__icon");
 
-  const banner  = document.getElementById("ai-status-banner");
-  const text    = document.getElementById("ai-status-text");
-  const iconEl  = banner.querySelector(".ai-banner__icon");
-
-  // Remove all mode classes, add the active one
   banner.classList.remove("ai-banner--loading", "ai-banner--ai", "ai-banner--fallback");
   banner.classList.add("ai-banner--" + mode);
 
-  const icons = { loading: "◌", ai: "✦", fallback: "⚠" };
-  iconEl.textContent = icons[mode] || "◌";
-  text.textContent   = message;
+  const icons = { loading: "◌", ai: "✦", fallback: "✿" };
+  if (iconEl) iconEl.textContent = icons[mode] || "◌";
+  if (text) text.textContent = message;
 }
 
 // ──────────────────────────────────────────────
-// 10. SVG FLOWER GENERATOR  (unchanged from v1, plus petalCountOverride)
+// 9. THE 12 PROCEDURAL SVG FLOWER RENDERERS
 // ──────────────────────────────────────────────
 
 /**
- * Creates a full SVG flower element.
- * @param {object} palette         - Colors { center, petals[], stem, accent }
- * @param {string} inputText       - Used to vary petal count if no override.
- * @param {number} [petalOverride] - If provided, use this petal count instead.
- * @returns {SVGElement}
+ * Creates the base SVG container with species-scoped defs and filters.
  */
-function generateFlowerSVG(palette, inputText, petalOverride) {
+function createBaseSVG(uid, palette) {
   const NS = "http://www.w3.org/2000/svg";
-  const petalCount = petalOverride != null
-    ? petalOverride
-    : 6 + (inputText.length % 7);
-
-  const SIZE = 300, CX = SIZE / 2, CY = SIZE / 2;
-
+  const SIZE = 300;
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("viewBox", `0 0 ${SIZE} ${SIZE}`);
-  svg.setAttribute("width",  "300");
+  svg.setAttribute("width", "300");
   svg.setAttribute("height", "300");
-  svg.setAttribute("xmlns",   NS);
-  svg.setAttribute("role",    "img");
-  svg.setAttribute("aria-label", "Generated spirit flower");
+  svg.setAttribute("xmlns", NS);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Spirit flower bloom");
 
-  // ── defs ──
   const defs = document.createElementNS(NS, "defs");
 
-  const petalGrad = document.createElementNS(NS, "radialGradient");
-  petalGrad.setAttribute("id", "petalGrad");
-  petalGrad.setAttribute("cx", "50%");
-  petalGrad.setAttribute("cy", "30%");
-  petalGrad.setAttribute("r",  "70%");
-  petalGrad.innerHTML = `
-    <stop offset="0%"   stop-color="${palette.petals[2] || palette.petals[0]}" stop-opacity="1"/>
-    <stop offset="60%"  stop-color="${palette.petals[1] || palette.petals[0]}" stop-opacity="0.9"/>
-    <stop offset="100%" stop-color="${palette.petals[0]}" stop-opacity="0.7"/>
-  `;
-
-  const centerGrad = document.createElementNS(NS, "radialGradient");
-  centerGrad.setAttribute("id", "centerGrad");
-  centerGrad.setAttribute("cx", "40%");
-  centerGrad.setAttribute("cy", "35%");
-  centerGrad.setAttribute("r",  "65%");
-  centerGrad.innerHTML = `
-    <stop offset="0%"   stop-color="#fffde7" stop-opacity="1"/>
-    <stop offset="40%"  stop-color="${palette.center}" stop-opacity="1"/>
+  // Petal Radial Gradient
+  const pGrad = document.createElementNS(NS, "radialGradient");
+  pGrad.setAttribute("id", `pGrad_${uid}`);
+  pGrad.setAttribute("cx", "50%");
+  pGrad.setAttribute("cy", "25%");
+  pGrad.setAttribute("r", "75%");
+  pGrad.innerHTML = `
+    <stop offset="0%" stop-color="${palette.petals[2] || palette.petals[0]}" stop-opacity="1"/>
+    <stop offset="55%" stop-color="${palette.petals[1] || palette.petals[0]}" stop-opacity="0.95"/>
     <stop offset="100%" stop-color="${palette.petals[0]}" stop-opacity="0.8"/>
   `;
 
-  const filter = document.createElementNS(NS, "filter");
-  filter.setAttribute("id", "glow");
-  filter.innerHTML = `
-    <feGaussianBlur stdDeviation="4" result="blur"/>
+  // Secondary/Accent Gradient
+  const aGrad = document.createElementNS(NS, "radialGradient");
+  aGrad.setAttribute("id", `aGrad_${uid}`);
+  aGrad.setAttribute("cx", "45%");
+  aGrad.setAttribute("cy", "35%");
+  aGrad.setAttribute("r", "65%");
+  aGrad.innerHTML = `
+    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"/>
+    <stop offset="50%" stop-color="${palette.accent || palette.center}"/>
+    <stop offset="100%" stop-color="${palette.petals[0]}" stop-opacity="0.7"/>
+  `;
+
+  // Center Gradient
+  const cGrad = document.createElementNS(NS, "radialGradient");
+  cGrad.setAttribute("id", `cGrad_${uid}`);
+  cGrad.setAttribute("cx", "40%");
+  cGrad.setAttribute("cy", "35%");
+  cGrad.setAttribute("r", "65%");
+  cGrad.innerHTML = `
+    <stop offset="0%" stop-color="#fffde7" stop-opacity="1"/>
+    <stop offset="40%" stop-color="${palette.center}" stop-opacity="1"/>
+    <stop offset="100%" stop-color="${palette.petals[0]}" stop-opacity="0.9"/>
+  `;
+
+  // Glow Filter
+  const glow = document.createElementNS(NS, "filter");
+  glow.setAttribute("id", `glow_${uid}`);
+  glow.innerHTML = `
+    <feGaussianBlur stdDeviation="3.5" result="blur"/>
     <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
   `;
 
-  const filterShimmer = document.createElementNS(NS, "filter");
-  filterShimmer.setAttribute("id", "shimmer");
-  filterShimmer.innerHTML = `
-    <feGaussianBlur stdDeviation="2.5" result="blur"/>
-    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-  `;
-
-  defs.appendChild(petalGrad);
-  defs.appendChild(centerGrad);
-  defs.appendChild(filter);
-  defs.appendChild(filterShimmer);
+  defs.appendChild(pGrad);
+  defs.appendChild(aGrad);
+  defs.appendChild(cGrad);
+  defs.appendChild(glow);
   svg.appendChild(defs);
 
-  // ── Stem ──
-  const stemGroup = document.createElementNS(NS, "g");
-  const stem = document.createElementNS(NS, "line");
-  stem.setAttribute("x1", CX); stem.setAttribute("y1", CY + 38);
-  stem.setAttribute("x2", CX); stem.setAttribute("y2", SIZE - 10);
+  return { svg, defs, NS, SIZE, CX: SIZE / 2, CY: SIZE / 2 };
+}
+
+// ── 1. MARIGOLD (Dense, ruffled multi-tiered scalloped petals, feathery leaves) ──
+function drawMarigold(svg, NS, CX, CY, palette, uid) {
+  // Curved stem with feathery pinnate leaves
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX} ${CY + 30} Q ${CX - 8} ${CY + 90} ${CX} 290`);
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "5");
+  stem.setAttribute("fill", "none");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Feathery leaves
+  [-1, 1].forEach((dir) => {
+    for (let j = 0; j < 3; j++) {
+      const ly = CY + 80 + j * 24;
+      const lx = CX + dir * 6;
+      const leaf = document.createElementNS(NS, "ellipse");
+      leaf.setAttribute("cx", lx + dir * 18);
+      leaf.setAttribute("cy", ly);
+      leaf.setAttribute("rx", "16");
+      leaf.setAttribute("ry", "5");
+      leaf.setAttribute("fill", palette.stem);
+      leaf.setAttribute("opacity", "0.85");
+      leaf.setAttribute("transform", `rotate(${dir * 25 - j * 8}, ${lx + dir * 18}, ${ly})`);
+      svg.appendChild(leaf);
+    }
+  });
+
+  const marigoldGroup = document.createElementNS(NS, "g");
+  marigoldGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // 3 Dense ruffled tiers
+  const tiers = [
+    { count: 16, dist: 50, rx: 16, ry: 34, op: 0.9 },
+    { count: 12, dist: 34, rx: 14, ry: 28, op: 0.95 },
+    { count: 9, dist: 18, rx: 12, ry: 22, op: 1 }
+  ];
+
+  tiers.forEach((t, tIdx) => {
+    for (let i = 0; i < t.count; i++) {
+      const angle = (360 / t.count) * i + tIdx * 11;
+      const rad = (angle * Math.PI) / 180;
+      const px = CX + Math.cos(rad) * t.dist;
+      const py = CY + Math.sin(rad) * t.dist;
+
+      const petal = document.createElementNS(NS, "path");
+      // Scalloped ruffled petal shape
+      petal.setAttribute("d", `M ${px - t.rx} ${py} Q ${px - t.rx * 1.2} ${py - t.ry} ${px} ${py - t.ry * 1.1} Q ${px + t.rx * 1.2} ${py - t.ry} ${px + t.rx} ${py} Z`);
+      petal.setAttribute("fill", `url(#pGrad_${uid})`);
+      petal.setAttribute("opacity", t.op);
+      petal.setAttribute("transform", `rotate(${angle + 90}, ${px}, ${py})`);
+      marigoldGroup.appendChild(petal);
+    }
+  });
+  svg.appendChild(marigoldGroup);
+
+  // Ruffled stippled center
+  const center = document.createElementNS(NS, "circle");
+  center.setAttribute("cx", CX);
+  center.setAttribute("cy", CY);
+  center.setAttribute("r", "22");
+  center.setAttribute("fill", `url(#cGrad_${uid})`);
+  svg.appendChild(center);
+
+  // Radiating stamen dots
+  for (let i = 0; i < 18; i++) {
+    const a = (360 / 18) * i;
+    const r = (a * Math.PI) / 180;
+    const dot = document.createElementNS(NS, "circle");
+    dot.setAttribute("cx", CX + Math.cos(r) * 14);
+    dot.setAttribute("cy", CY + Math.sin(r) * 14);
+    dot.setAttribute("r", "2.2");
+    dot.setAttribute("fill", palette.accent);
+    svg.appendChild(dot);
+  }
+}
+
+// ── 2. ROSE (Layered spiral and cup petals with curved thorny stem) ──
+function drawRose(svg, NS, CX, CY, palette, uid) {
+  // Thorny curved stem
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX} ${CY + 40} C ${CX - 15} ${CY + 110} ${CX + 20} ${CY + 190} ${CX - 5} 290`);
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "5");
+  stem.setAttribute("fill", "none");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Thorns & rose leaves
+  const thorn = document.createElementNS(NS, "path");
+  thorn.setAttribute("d", `M ${CX - 6} ${CY + 120} Q ${CX - 16} ${CY + 124} ${CX - 22} ${CY + 132} Q ${CX - 12} ${CY + 130} ${CX - 3} ${CY + 127} Z`);
+  thorn.setAttribute("fill", palette.stem);
+  svg.appendChild(thorn);
+
+  const leaf = document.createElementNS(NS, "path");
+  leaf.setAttribute("d", `M ${CX + 10} ${CY + 150} Q ${CX + 55} ${CY + 135} ${CX + 60} ${CY + 165} Q ${CX + 35} ${CY + 180} ${CX + 10} ${CY + 155} Z`);
+  leaf.setAttribute("fill", palette.stem);
+  leaf.setAttribute("opacity", "0.9");
+  svg.appendChild(leaf);
+
+  const roseGroup = document.createElementNS(NS, "g");
+  roseGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // Outer guard petals (5 broad cup petals)
+  for (let i = 0; i < 5; i++) {
+    const angle = (360 / 5) * i - 90;
+    const rad = (angle * Math.PI) / 180;
+    const px = CX + Math.cos(rad) * 44;
+    const py = CY + Math.sin(rad) * 44;
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", `M ${px - 32} ${py} C ${px - 40} ${py - 48} ${px + 40} ${py - 48} ${px + 32} ${py} C ${px + 20} ${py + 25} ${px - 20} ${py + 25} ${px - 32} ${py} Z`);
+    p.setAttribute("fill", `url(#pGrad_${uid})`);
+    p.setAttribute("opacity", "0.85");
+    p.setAttribute("transform", `rotate(${angle + 90}, ${px}, ${py})`);
+    roseGroup.appendChild(p);
+  }
+
+  // Intermediate overlapping cup petals
+  for (let i = 0; i < 6; i++) {
+    const angle = (360 / 6) * i + 30;
+    const rad = (angle * Math.PI) / 180;
+    const px = CX + Math.cos(rad) * 26;
+    const py = CY + Math.sin(rad) * 26;
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", `M ${px - 22} ${py} C ${px - 28} ${py - 34} ${px + 28} ${py - 34} ${px + 22} ${py} Z`);
+    p.setAttribute("fill", `url(#pGrad_${uid})`);
+    p.setAttribute("opacity", "0.95");
+    p.setAttribute("transform", `rotate(${angle + 90}, ${px}, ${py})`);
+    roseGroup.appendChild(p);
+  }
+
+  // Inner spiral whorl
+  const spiral = document.createElementNS(NS, "path");
+  spiral.setAttribute("d", `M ${CX} ${CY - 12} C ${CX + 14} ${CY - 12} ${CX + 18} ${CY + 8} ${CX} ${CY + 14} C ${CX - 16} ${CY + 14} ${CX - 14} ${CY - 6} ${CX - 4} ${CY - 4} C ${CX + 8} ${CY - 4} ${CX + 6} ${CY + 6} ${CX} ${CY + 6}`);
+  spiral.setAttribute("stroke", palette.accent);
+  spiral.setAttribute("stroke-width", "3");
+  spiral.setAttribute("fill", `url(#cGrad_${uid})`);
+  roseGroup.appendChild(spiral);
+
+  svg.appendChild(roseGroup);
+}
+
+// ── 3. MOONFLOWER (Wide luminous star-trumpet, starlight ribs, twining vine) ──
+function drawMoonflower(svg, NS, CX, CY, palette, uid) {
+  // Twining vine stem
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX} ${CY + 40} Q ${CX + 35} ${CY + 110} ${CX} ${CY + 180} T ${CX - 15} 290`);
   stem.setAttribute("stroke", palette.stem);
   stem.setAttribute("stroke-width", "4");
+  stem.setAttribute("fill", "none");
   stem.setAttribute("stroke-linecap", "round");
-  stemGroup.appendChild(stem);
+  svg.appendChild(stem);
 
-  const leaf = document.createElementNS(NS, "ellipse");
-  leaf.setAttribute("cx", CX + 14); leaf.setAttribute("cy", CY + 68);
-  leaf.setAttribute("rx", "14");    leaf.setAttribute("ry", "6");
-  leaf.setAttribute("fill", palette.stem);
-  leaf.setAttribute("opacity", "0.8");
-  leaf.setAttribute("transform", `rotate(30, ${CX + 14}, ${CY + 68})`);
-  stemGroup.appendChild(leaf);
-  svg.appendChild(stemGroup);
+  // Heart-shaped vine leaves
+  const vleaf = document.createElementNS(NS, "path");
+  vleaf.setAttribute("d", `M ${CX + 18} ${CY + 130} C ${CX + 38} ${CY + 105} ${CX + 65} ${CY + 135} ${CX + 35} ${CY + 160} Z`);
+  vleaf.setAttribute("fill", palette.stem);
+  vleaf.setAttribute("opacity", "0.8");
+  svg.appendChild(vleaf);
 
-  // ── Outer petals ──
-  const petalsGroup = document.createElementNS(NS, "g");
-  petalsGroup.setAttribute("filter", "url(#glow)");
+  const moonGroup = document.createElementNS(NS, "g");
+  moonGroup.setAttribute("filter", `url(#glow_${uid})`);
 
-  for (let i = 0; i < petalCount; i++) {
-    const angle = (360 / petalCount) * i - 90;
-    const rad   = (angle * Math.PI) / 180;
-    const petalLen = 72 + (i % 3) * 6;
-    const petalW   = 20 + (i % 2) * 5;
-    const offsetDist = 42;
-    const px = CX + Math.cos(rad) * offsetDist;
-    const py = CY + Math.sin(rad) * offsetDist;
+  // Fluted trumpet star-disk (5 wide scalloped lobes)
+  let d = `M ${CX} ${CY - 82}`;
+  for (let i = 0; i < 5; i++) {
+    const tipAngle = -90 + i * 72;
+    const dipAngle = tipAngle + 36;
+    const r1 = 84;
+    const r2 = 56;
+    const rad1 = (tipAngle * Math.PI) / 180;
+    const rad2 = (dipAngle * Math.PI) / 180;
+    const p1x = CX + Math.cos(rad1) * r1;
+    const p1y = CY + Math.sin(rad1) * r1;
+    const p2x = CX + Math.cos(rad2) * r2;
+    const p2y = CY + Math.sin(rad2) * r2;
+    d += ` Q ${CX + Math.cos(rad1 - 0.25) * 80} ${CY + Math.sin(rad1 - 0.25) * 80} ${p1x} ${p1y}`;
+    d += ` Q ${CX + Math.cos(rad1 + 0.25) * 80} ${CY + Math.sin(rad1 + 0.25) * 80} ${p2x} ${p2y}`;
+  }
+  d += " Z";
 
-    const petal = document.createElementNS(NS, "ellipse");
-    petal.setAttribute("cx", px); petal.setAttribute("cy", py);
-    petal.setAttribute("rx", petalW); petal.setAttribute("ry", petalLen / 2);
-    petal.setAttribute("fill", "url(#petalGrad)");
-    petal.setAttribute("opacity", "0.88");
+  const disc = document.createElementNS(NS, "path");
+  disc.setAttribute("d", d);
+  disc.setAttribute("fill", `url(#pGrad_${uid})`);
+  disc.setAttribute("opacity", "0.92");
+  moonGroup.appendChild(disc);
+
+  // 5 Starburst ribs radiating outward
+  for (let i = 0; i < 5; i++) {
+    const angle = -90 + i * 72;
+    const rad = (angle * Math.PI) / 180;
+    const rib = document.createElementNS(NS, "line");
+    rib.setAttribute("x1", CX);
+    rib.setAttribute("y1", CY);
+    rib.setAttribute("x2", CX + Math.cos(rad) * 80);
+    rib.setAttribute("y2", CY + Math.sin(rad) * 80);
+    rib.setAttribute("stroke", palette.accent);
+    rib.setAttribute("stroke-width", "2");
+    rib.setAttribute("opacity", "0.8");
+    moonGroup.appendChild(rib);
+  }
+
+  // Glowing center with curved delicate pistils
+  const center = document.createElementNS(NS, "circle");
+  center.setAttribute("cx", CX);
+  center.setAttribute("cy", CY);
+  center.setAttribute("r", "16");
+  center.setAttribute("fill", `url(#cGrad_${uid})`);
+  moonGroup.appendChild(center);
+
+  for (let i = 0; i < 5; i++) {
+    const a = -90 + i * 72 + 36;
+    const rad = (a * Math.PI) / 180;
+    const dot = document.createElementNS(NS, "circle");
+    dot.setAttribute("cx", CX + Math.cos(rad) * 22);
+    dot.setAttribute("cy", CY + Math.sin(rad) * 22);
+    dot.setAttribute("r", "3");
+    dot.setAttribute("fill", "#ffffff");
+    dot.setAttribute("opacity", "0.95");
+    moonGroup.appendChild(dot);
+  }
+
+  svg.appendChild(moonGroup);
+}
+
+// ── 4. BLUEBELL (Nodding arching raceme with hanging bell florets) ──
+function drawBluebell(svg, NS, CX, CY, palette, uid) {
+  // Gracefully arching nodding stalk
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX - 30} 290 Q ${CX - 30} ${CY + 80} ${CX + 20} ${CY} Q ${CX + 50} ${CY - 40} ${CX + 20} ${CY - 60}`);
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "4.5");
+  stem.setAttribute("fill", "none");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Basal linear leaves
+  const leaf1 = document.createElementNS(NS, "path");
+  leaf1.setAttribute("d", `M ${CX - 35} 290 Q ${CX - 75} 220 ${CX - 65} 170 Q ${CX - 50} 220 ${CX - 30} 290`);
+  leaf1.setAttribute("fill", palette.stem);
+  leaf1.setAttribute("opacity", "0.85");
+  svg.appendChild(leaf1);
+
+  const bluebellGroup = document.createElementNS(NS, "g");
+  bluebellGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // 4 Hanging bell florets dangling along the arch
+  const bells = [
+    { x: CX + 25, y: CY - 50, scale: 0.9, rot: -20 },
+    { x: CX + 40, y: CY - 20, scale: 1.05, rot: 15 },
+    { x: CX + 28, y: CY + 18, scale: 1.0, rot: 40 },
+    { x: CX + 8, y: CY + 55, scale: 0.85, rot: 60 }
+  ];
+
+  bells.forEach((b) => {
+    const bg = document.createElementNS(NS, "g");
+    bg.setAttribute("transform", `translate(${b.x}, ${b.y}) scale(${b.scale}) rotate(${b.rot})`);
+
+    // Pedicel
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", `M 0 0 C -8 -10 -15 -10 -22 -6`);
+    p.setAttribute("stroke", palette.stem);
+    p.setAttribute("stroke-width", "2");
+    p.setAttribute("fill", "none");
+    bg.appendChild(p);
+
+    // Flared bell body
+    const bell = document.createElementNS(NS, "path");
+    bell.setAttribute("d", `M -10 -4 C -2 15 -6 32 -16 40 C -8 38 8 38 16 40 C 6 32 2 15 10 -4 Z`);
+    bell.setAttribute("fill", `url(#pGrad_${uid})`);
+    bell.setAttribute("opacity", "0.9");
+    bg.appendChild(bell);
+
+    // Reflexed flared tips
+    const rim = document.createElementNS(NS, "path");
+    rim.setAttribute("d", `M -16 40 Q -22 46 -14 48 Q 0 42 14 48 Q 22 46 16 40 Z`);
+    rim.setAttribute("fill", palette.accent);
+    rim.setAttribute("opacity", "0.85");
+    bg.appendChild(rim);
+
+    // Stamen peek
+    const stamen = document.createElementNS(NS, "line");
+    stamen.setAttribute("x1", "0");
+    stamen.setAttribute("y1", "30");
+    stamen.setAttribute("x2", "0");
+    stamen.setAttribute("y2", "47");
+    stamen.setAttribute("stroke", palette.center);
+    stamen.setAttribute("stroke-width", "2");
+    bg.appendChild(stamen);
+
+    bluebellGroup.appendChild(bg);
+  });
+
+  svg.appendChild(bluebellGroup);
+}
+
+// ── 5. SUNFLOWER (Large prominent dark seed disc, 26 radiating golden rays) ──
+function drawSunflower(svg, NS, CX, CY, palette, uid) {
+  // Thick sturdy stem
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX} ${CY + 50} L ${CX} 290`);
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "8");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Broad cordate leaves
+  const leafL = document.createElementNS(NS, "path");
+  leafL.setAttribute("d", `M ${CX - 4} ${CY + 140} C ${CX - 60} ${CY + 110} ${CX - 85} ${CY + 160} ${CX - 4} ${CY + 185} Z`);
+  leafL.setAttribute("fill", palette.stem);
+  leafL.setAttribute("opacity", "0.9");
+  svg.appendChild(leafL);
+
+  const leafR = document.createElementNS(NS, "path");
+  leafR.setAttribute("d", `M ${CX + 4} ${CY + 170} C ${CX + 60} ${CY + 140} ${CX + 85} ${CY + 190} ${CX + 4} ${CY + 215} Z`);
+  leafR.setAttribute("fill", palette.stem);
+  leafR.setAttribute("opacity", "0.9");
+  svg.appendChild(leafR);
+
+  const sunGroup = document.createElementNS(NS, "g");
+  sunGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // 26 Radiating pointed ray petals
+  const rays = 26;
+  for (let i = 0; i < rays; i++) {
+    const angle = (360 / rays) * i;
+    const rad = (angle * Math.PI) / 180;
+    const px = CX + Math.cos(rad) * 58;
+    const py = CY + Math.sin(rad) * 58;
+    const petal = document.createElementNS(NS, "path");
+    petal.setAttribute("d", `M ${px - 10} ${py} Q ${px} ${py - 38} ${px + 10} ${py} Q ${px} ${py + 8} ${px - 10} ${py} Z`);
+    petal.setAttribute("fill", `url(#pGrad_${uid})`);
+    petal.setAttribute("opacity", "0.95");
     petal.setAttribute("transform", `rotate(${angle + 90}, ${px}, ${py})`);
-
-    const anim = document.createElementNS(NS, "animateTransform");
-    anim.setAttribute("attributeName", "transform");
-    anim.setAttribute("type", "rotate");
-    anim.setAttribute("from", `${angle + 90} ${px} ${py}`);
-    anim.setAttribute("to",   `${angle + 94} ${px} ${py}`);
-    anim.setAttribute("dur",  `${2.5 + i * 0.2}s`);
-    anim.setAttribute("repeatCount", "indefinite");
-    anim.setAttribute("direction", "alternate");
-    anim.setAttribute("calcMode", "spline");
-    anim.setAttribute("keySplines", "0.42 0 0.58 1");
-    petal.appendChild(anim);
-    petalsGroup.appendChild(petal);
+    sunGroup.appendChild(petal);
   }
-  svg.appendChild(petalsGroup);
+  svg.appendChild(sunGroup);
 
-  // ── Inner accent petals ──
-  const innerGroup = document.createElementNS(NS, "g");
-  const innerCount = Math.max(5, petalCount - 2);
+  // Large dark central disk
+  const disc = document.createElementNS(NS, "circle");
+  disc.setAttribute("cx", CX);
+  disc.setAttribute("cy", CY);
+  disc.setAttribute("r", "44");
+  disc.setAttribute("fill", `url(#cGrad_${uid})`);
+  svg.appendChild(disc);
 
-  for (let i = 0; i < innerCount; i++) {
-    const angle = (360 / innerCount) * i - 60;
-    const rad   = (angle * Math.PI) / 180;
-    const offsetDist = 26;
-    const px = CX + Math.cos(rad) * offsetDist;
-    const py = CY + Math.sin(rad) * offsetDist;
-
-    const innerPetal = document.createElementNS(NS, "ellipse");
-    innerPetal.setAttribute("cx", px); innerPetal.setAttribute("cy", py);
-    innerPetal.setAttribute("rx", "10"); innerPetal.setAttribute("ry", "28");
-    innerPetal.setAttribute("fill", palette.accent);
-    innerPetal.setAttribute("opacity", "0.55");
-    innerPetal.setAttribute("transform", `rotate(${angle + 90}, ${px}, ${py})`);
-    innerGroup.appendChild(innerPetal);
+  // Concentric seed phyllotaxis dots
+  for (let r = 10; r <= 36; r += 7) {
+    const count = Math.floor(r * 1.5);
+    for (let j = 0; j < count; j++) {
+      const a = (360 / count) * j + r * 15;
+      const rad = (a * Math.PI) / 180;
+      const sdot = document.createElementNS(NS, "circle");
+      sdot.setAttribute("cx", CX + Math.cos(rad) * r);
+      sdot.setAttribute("cy", CY + Math.sin(rad) * r);
+      sdot.setAttribute("r", "1.6");
+      sdot.setAttribute("fill", palette.accent);
+      sdot.setAttribute("opacity", "0.85");
+      svg.appendChild(sdot);
+    }
   }
-  svg.appendChild(innerGroup);
+}
 
-  // ── Decorative inter-petal dots ──
-  const dotGroup = document.createElementNS(NS, "g");
-  for (let i = 0; i < petalCount; i++) {
-    const angle = (360 / petalCount) * i - 90 + (180 / petalCount);
-    const rad   = (angle * Math.PI) / 180;
-    const dx = CX + Math.cos(rad) * 58;
-    const dy = CY + Math.sin(rad) * 58;
+// ── 6. LAVENDER (Tall upright spike with 6 tiered floret whorls) ──
+function drawLavender(svg, NS, CX, CY, palette, uid) {
+  // Slender upright stem
+  const stem = document.createElementNS(NS, "line");
+  stem.setAttribute("x1", CX);
+  stem.setAttribute("y1", CY - 75);
+  stem.setAttribute("x2", CX);
+  stem.setAttribute("y2", "290");
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "3.5");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Narrow needle-like leaves
+  for (let j = 0; j < 4; j++) {
+    const ly = CY + 100 + j * 30;
+    [-1, 1].forEach((dir) => {
+      const leaf = document.createElementNS(NS, "line");
+      leaf.setAttribute("x1", CX);
+      leaf.setAttribute("y1", ly);
+      leaf.setAttribute("x2", CX + dir * 28);
+      leaf.setAttribute("y2", ly - 18);
+      leaf.setAttribute("stroke", palette.stem);
+      leaf.setAttribute("stroke-width", "2.5");
+      leaf.setAttribute("stroke-linecap", "round");
+      svg.appendChild(leaf);
+    });
+  }
+
+  const lavGroup = document.createElementNS(NS, "g");
+  lavGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // 7 Tiered whorls of tubular florets along the top half
+  const whorls = [
+    { y: CY - 65, count: 5, rx: 7, ry: 10, spread: 14 },
+    { y: CY - 42, count: 6, rx: 8, ry: 12, spread: 20 },
+    { y: CY - 18, count: 7, rx: 9, ry: 13, spread: 24 },
+    { y: CY + 8, count: 7, rx: 9, ry: 14, spread: 26 },
+    { y: CY + 34, count: 6, rx: 8, ry: 13, spread: 22 },
+    { y: CY + 60, count: 5, rx: 7, ry: 11, spread: 18 }
+  ];
+
+  whorls.forEach((w) => {
+    for (let i = 0; i < w.count; i++) {
+      const frac = (i - (w.count - 1) / 2) / ((w.count - 1) / 2 || 1);
+      const fx = CX + frac * w.spread;
+      const fy = w.y + (Math.abs(frac) * 4);
+      const floret = document.createElementNS(NS, "ellipse");
+      floret.setAttribute("cx", fx);
+      floret.setAttribute("cy", fy);
+      floret.setAttribute("rx", w.rx);
+      floret.setAttribute("ry", w.ry);
+      floret.setAttribute("fill", `url(#pGrad_${uid})`);
+      floret.setAttribute("opacity", "0.92");
+      floret.setAttribute("transform", `rotate(${frac * 35}, ${fx}, ${fy})`);
+      lavGroup.appendChild(floret);
+
+      // Accent dot on floret tip
+      const fdot = document.createElementNS(NS, "circle");
+      fdot.setAttribute("cx", fx);
+      fdot.setAttribute("cy", fy - w.ry * 0.6);
+      fdot.setAttribute("r", "2");
+      fdot.setAttribute("fill", palette.accent);
+      lavGroup.appendChild(fdot);
+    }
+  });
+
+  // Soft fragrant aura motes
+  for (let k = 0; k < 12; k++) {
+    const mote = document.createElementNS(NS, "circle");
+    mote.setAttribute("cx", CX + (Math.sin(k * 1.7) * 45));
+    mote.setAttribute("cy", CY - 50 + k * 12);
+    mote.setAttribute("r", "1.8");
+    mote.setAttribute("fill", palette.accent);
+    mote.setAttribute("opacity", "0.75");
+    lavGroup.appendChild(mote);
+  }
+
+  svg.appendChild(lavGroup);
+}
+
+// ── 7. WHITE LILY (6 Long reflexed pointed tepals with 6 prominent protruding stamens) ──
+function drawWhiteLily(svg, NS, CX, CY, palette, uid) {
+  // Smooth upright stem
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX} ${CY + 35} Q ${CX + 10} ${CY + 120} ${CX} 290`);
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "5");
+  stem.setAttribute("fill", "none");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Lily lanceolate leaves
+  const leaf = document.createElementNS(NS, "path");
+  leaf.setAttribute("d", `M ${CX + 4} ${CY + 130} Q ${CX + 55} ${CY + 120} ${CX + 80} ${CY + 150} Q ${CX + 35} ${CY + 155} ${CX + 4} ${CY + 140} Z`);
+  leaf.setAttribute("fill", palette.stem);
+  leaf.setAttribute("opacity", "0.85");
+  svg.appendChild(leaf);
+
+  const lilyGroup = document.createElementNS(NS, "g");
+  lilyGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // 6 Long reflexed pointed tepals (3 inner, 3 outer)
+  for (let i = 0; i < 6; i++) {
+    const angle = (360 / 6) * i - 90;
+    const rad = (angle * Math.PI) / 180;
+    const isInner = i % 2 === 1;
+    const len = isInner ? 78 : 88;
+    const w = isInner ? 24 : 30;
+
+    const tepal = document.createElementNS(NS, "path");
+    // Sweeping pointed reflexed petal
+    tepal.setAttribute("d", `M ${CX} ${CY} Q ${CX - w} ${CY - len * 0.6} ${CX} ${CY - len} Q ${CX + w} ${CY - len * 0.6} ${CX} ${CY} Z`);
+    tepal.setAttribute("fill", isInner ? `url(#aGrad_${uid})` : `url(#pGrad_${uid})`);
+    tepal.setAttribute("opacity", isInner ? "0.95" : "0.85");
+    tepal.setAttribute("transform", `rotate(${angle + 90}, ${CX}, ${CY})`);
+    lilyGroup.appendChild(tepal);
+  }
+
+  // 6 Long protruding stamens with prominent horizontal T-shaped anthers
+  for (let i = 0; i < 6; i++) {
+    const angle = (360 / 6) * i - 60;
+    const rad = (angle * Math.PI) / 180;
+    const fx = CX + Math.cos(rad) * 48;
+    const fy = CY + Math.sin(rad) * 48;
+
+    // Filament
+    const fil = document.createElementNS(NS, "line");
+    fil.setAttribute("x1", CX);
+    fil.setAttribute("y1", CY);
+    fil.setAttribute("x2", fx);
+    fil.setAttribute("y2", fy);
+    fil.setAttribute("stroke", "#c7f9cc");
+    fil.setAttribute("stroke-width", "2");
+    lilyGroup.appendChild(fil);
+
+    // T-shaped anther
+    const anther = document.createElementNS(NS, "ellipse");
+    anther.setAttribute("cx", fx);
+    anther.setAttribute("cy", fy);
+    anther.setAttribute("rx", "6");
+    anther.setAttribute("ry", "2.8");
+    anther.setAttribute("fill", palette.accent);
+    anther.setAttribute("transform", `rotate(${angle + 90}, ${fx}, ${fy})`);
+    lilyGroup.appendChild(anther);
+  }
+
+  // Pale chartreuse central throat
+  const throat = document.createElementNS(NS, "circle");
+  throat.setAttribute("cx", CX);
+  throat.setAttribute("cy", CY);
+  throat.setAttribute("r", "14");
+  throat.setAttribute("fill", `url(#cGrad_${uid})`);
+  lilyGroup.appendChild(throat);
+
+  svg.appendChild(lilyGroup);
+}
+
+// ── 8. CHERRY BLOSSOM (5 Distinctive cleft/notched petals with radial stamens) ──
+function drawCherryBlossom(svg, NS, CX, CY, palette, uid) {
+  // Woody twig branch
+  const branch = document.createElementNS(NS, "path");
+  branch.setAttribute("d", `M ${CX - 60} 290 Q ${CX - 20} ${CY + 120} ${CX} ${CY + 30}`);
+  branch.setAttribute("stroke", palette.stem);
+  branch.setAttribute("stroke-width", "5.5");
+  branch.setAttribute("fill", "none");
+  branch.setAttribute("stroke-linecap", "round");
+  svg.appendChild(branch);
+
+  // Side shoot with small companion bud
+  const shoot = document.createElementNS(NS, "path");
+  shoot.setAttribute("d", `M ${CX - 15} ${CY + 110} Q ${CX - 40} ${CY + 85} ${CX - 45} ${CY + 70}`);
+  shoot.setAttribute("stroke", palette.stem);
+  shoot.setAttribute("stroke-width", "3");
+  shoot.setAttribute("fill", "none");
+  svg.appendChild(shoot);
+
+  const bud = document.createElementNS(NS, "ellipse");
+  bud.setAttribute("cx", CX - 47);
+  bud.setAttribute("cy", CY + 66);
+  bud.setAttribute("rx", "7");
+  bud.setAttribute("ry", "11");
+  bud.setAttribute("fill", `url(#pGrad_${uid})`);
+  bud.setAttribute("transform", `rotate(-30, ${CX - 47}, ${CY + 66})`);
+  svg.appendChild(bud);
+
+  const cherryGroup = document.createElementNS(NS, "g");
+  cherryGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // 5 Notched / cleft petals (each petal has a distinct V-cut on its top edge)
+  for (let i = 0; i < 5; i++) {
+    const angle = (360 / 5) * i - 90;
+    const petal = document.createElementNS(NS, "path");
+    // Heart/notched petal shape
+    petal.setAttribute("d", `M ${CX} ${CY} C ${CX - 32} ${CY - 30} ${CX - 28} ${CY - 70} ${CX - 6} ${CY - 68} L ${CX} ${CY - 58} L ${CX + 6} ${CY - 68} C ${CX + 28} ${CY - 70} ${CX + 32} ${CY - 30} ${CX} ${CY} Z`);
+    petal.setAttribute("fill", `url(#pGrad_${uid})`);
+    petal.setAttribute("opacity", "0.92");
+    petal.setAttribute("transform", `rotate(${angle + 90}, ${CX}, ${CY})`);
+    cherryGroup.appendChild(petal);
+  }
+
+  // Central ring of radiating fine stamen filaments with golden/crimson dots
+  for (let i = 0; i < 18; i++) {
+    const angle = (360 / 18) * i;
+    const rad = (angle * Math.PI) / 180;
+    const sx = CX + Math.cos(rad) * 22;
+    const sy = CY + Math.sin(rad) * 22;
+
+    const fil = document.createElementNS(NS, "line");
+    fil.setAttribute("x1", CX);
+    fil.setAttribute("y1", CY);
+    fil.setAttribute("x2", sx);
+    fil.setAttribute("y2", sy);
+    fil.setAttribute("stroke", palette.center);
+    fil.setAttribute("stroke-width", "1.4");
+    cherryGroup.appendChild(fil);
 
     const dot = document.createElementNS(NS, "circle");
-    dot.setAttribute("cx", dx); dot.setAttribute("cy", dy);
-    dot.setAttribute("r", "3");
-    dot.setAttribute("fill", palette.center);
-    dot.setAttribute("opacity", "0.6");
-
-    const anim = document.createElementNS(NS, "animate");
-    anim.setAttribute("attributeName", "opacity");
-    anim.setAttribute("values", "0.3;0.9;0.3");
-    anim.setAttribute("dur", `${1.5 + i * 0.18}s`);
-    anim.setAttribute("repeatCount", "indefinite");
-    dot.appendChild(anim);
-    dotGroup.appendChild(dot);
+    dot.setAttribute("cx", sx);
+    dot.setAttribute("cy", sy);
+    dot.setAttribute("r", "2");
+    dot.setAttribute("fill", palette.accent);
+    cherryGroup.appendChild(dot);
   }
-  svg.appendChild(dotGroup);
 
-  // ── Centre ──
-  const centre = document.createElementNS(NS, "circle");
-  centre.setAttribute("cx", CX); centre.setAttribute("cy", CY);
-  centre.setAttribute("r", "30");
-  centre.setAttribute("fill", "url(#centerGrad)");
-  centre.setAttribute("filter", "url(#shimmer)");
-  svg.appendChild(centre);
+  // Crimson floral eye
+  const centerEye = document.createElementNS(NS, "circle");
+  centerEye.setAttribute("cx", CX);
+  centerEye.setAttribute("cy", CY);
+  centerEye.setAttribute("r", "8");
+  centerEye.setAttribute("fill", palette.center);
+  cherryGroup.appendChild(centerEye);
 
-  const dotPattern = [[0,-16],[14,-8],[14,8],[0,16],[-14,8],[-14,-8],[0,0]];
-  const dpGroup = document.createElementNS(NS, "g");
-  dotPattern.forEach(function (pos) {
-    const d = document.createElementNS(NS, "circle");
-    d.setAttribute("cx", CX + pos[0]); d.setAttribute("cy", CY + pos[1]);
-    d.setAttribute("r",  pos[0] === 0 && pos[1] === 0 ? "5" : "3");
-    d.setAttribute("fill", pos[0] === 0 && pos[1] === 0 ? "#fff" : palette.center);
-    d.setAttribute("opacity", "0.9");
-    dpGroup.appendChild(d);
+  svg.appendChild(cherryGroup);
+}
+
+// ── 9. FORGET-ME-NOT (5 Rounded sky-blue petals with pentagonal yellow eye) ──
+function drawForgetMeNot(svg, NS, CX, CY, palette, uid) {
+  // Branching delicate stem
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX} ${CY + 30} Q ${CX - 15} ${CY + 120} ${CX - 5} 290`);
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "4");
+  stem.setAttribute("fill", "none");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Soft rounded leaves
+  const leaf = document.createElementNS(NS, "ellipse");
+  leaf.setAttribute("cx", CX + 20);
+  leaf.setAttribute("cy", CY + 140);
+  leaf.setAttribute("rx", "18");
+  leaf.setAttribute("ry", "8");
+  leaf.setAttribute("fill", palette.stem);
+  leaf.setAttribute("opacity", "0.85");
+  leaf.setAttribute("transform", `rotate(25, ${CX + 20}, ${CY + 140})`);
+  svg.appendChild(leaf);
+
+  const fmnGroup = document.createElementNS(NS, "g");
+  fmnGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // 5 Soft rounded paddle petals
+  for (let i = 0; i < 5; i++) {
+    const angle = (360 / 5) * i - 90;
+    const rad = (angle * Math.PI) / 180;
+    const px = CX + Math.cos(rad) * 40;
+    const py = CY + Math.sin(rad) * 40;
+
+    const petal = document.createElementNS(NS, "ellipse");
+    petal.setAttribute("cx", px);
+    petal.setAttribute("cy", py);
+    petal.setAttribute("rx", "26");
+    petal.setAttribute("ry", "28");
+    petal.setAttribute("fill", `url(#pGrad_${uid})`);
+    petal.setAttribute("opacity", "0.92");
+    petal.setAttribute("transform", `rotate(${angle + 90}, ${px}, ${py})`);
+    fmnGroup.appendChild(petal);
+
+    // White throat star ray
+    const ray = document.createElementNS(NS, "line");
+    ray.setAttribute("x1", CX);
+    ray.setAttribute("y1", CY);
+    ray.setAttribute("x2", CX + Math.cos(rad) * 25);
+    ray.setAttribute("y2", CY + Math.sin(rad) * 25);
+    ray.setAttribute("stroke", "#ffffff");
+    ray.setAttribute("stroke-width", "2");
+    ray.setAttribute("opacity", "0.9");
+    fmnGroup.appendChild(ray);
+  }
+
+  // Vivid pentagonal raised yellow eye
+  const eye = document.createElementNS(NS, "circle");
+  eye.setAttribute("cx", CX);
+  eye.setAttribute("cy", CY);
+  eye.setAttribute("r", "14");
+  eye.setAttribute("fill", palette.center);
+  eye.setAttribute("stroke", "#ffffff");
+  eye.setAttribute("stroke-width", "2");
+  fmnGroup.appendChild(eye);
+
+  const pupil = document.createElementNS(NS, "circle");
+  pupil.setAttribute("cx", CX);
+  pupil.setAttribute("cy", CY);
+  pupil.setAttribute("r", "4.5");
+  pupil.setAttribute("fill", "#592a00");
+  fmnGroup.appendChild(pupil);
+
+  svg.appendChild(fmnGroup);
+}
+
+// ── 10. NIGHTSHADE FANTASY (5 Reflexed pointed star petals, protruding golden cone) ──
+function drawNightshade(svg, NS, CX, CY, palette, uid) {
+  // Twisting dusky stem
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX} ${CY + 30} Q ${CX + 25} ${CY + 90} ${CX - 15} ${CY + 180} T ${CX} 290`);
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "4.5");
+  stem.setAttribute("fill", "none");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Wavy pointed leaves
+  const nleaf = document.createElementNS(NS, "path");
+  nleaf.setAttribute("d", `M ${CX - 10} ${CY + 120} Q ${CX - 60} ${CY + 90} ${CX - 75} ${CY + 130} Q ${CX - 40} ${CY + 145} ${CX - 10} ${CY + 130} Z`);
+  nleaf.setAttribute("fill", palette.stem);
+  nleaf.setAttribute("opacity", "0.85");
+  svg.appendChild(nleaf);
+
+  const nightGroup = document.createElementNS(NS, "g");
+  nightGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // 5 Sharply reflexed pointed star petals curving backwards
+  for (let i = 0; i < 5; i++) {
+    const angle = (360 / 5) * i - 90;
+    const starPetal = document.createElementNS(NS, "path");
+    starPetal.setAttribute("d", `M ${CX} ${CY} Q ${CX - 24} ${CY - 30} ${CX} ${CY - 82} Q ${CX + 24} ${CY - 30} ${CX} ${CY} Z`);
+    starPetal.setAttribute("fill", `url(#pGrad_${uid})`);
+    starPetal.setAttribute("stroke", palette.accent);
+    starPetal.setAttribute("stroke-width", "1.5");
+    starPetal.setAttribute("opacity", "0.95");
+    starPetal.setAttribute("transform", `rotate(${angle + 90}, ${CX}, ${CY})`);
+    nightGroup.appendChild(starPetal);
+  }
+
+  // Dramatic forward-thrusting golden cone beak (fused anthers)
+  const beak = document.createElementNS(NS, "path");
+  beak.setAttribute("d", `M ${CX - 14} ${CY - 6} L ${CX + 14} ${CY - 6} L ${CX} ${CY + 36} Z`);
+  beak.setAttribute("fill", palette.center);
+  beak.setAttribute("stroke", "#ffffff");
+  beak.setAttribute("stroke-width", "1.5");
+  nightGroup.appendChild(beak);
+
+  // Protruding green style tip
+  const styleTip = document.createElementNS(NS, "line");
+  styleTip.setAttribute("x1", CX);
+  styleTip.setAttribute("y1", CY + 25);
+  styleTip.setAttribute("x2", CX);
+  styleTip.setAttribute("y2", CY + 48);
+  styleTip.setAttribute("stroke", palette.accent);
+  styleTip.setAttribute("stroke-width", "2.5");
+  styleTip.setAttribute("stroke-linecap", "round");
+  nightGroup.appendChild(styleTip);
+
+  // Mystical floating embers
+  for (let i = 0; i < 8; i++) {
+    const ember = document.createElementNS(NS, "circle");
+    ember.setAttribute("cx", CX + Math.sin(i * 1.9) * 60);
+    ember.setAttribute("cy", CY + Math.cos(i * 2.1) * 60);
+    ember.setAttribute("r", "2");
+    ember.setAttribute("fill", palette.accent);
+    ember.setAttribute("opacity", "0.8");
+    nightGroup.appendChild(ember);
+  }
+
+  svg.appendChild(nightGroup);
+}
+
+// ── 11. GHOST ORCHID (Translucent petals, frog labellum lip with trailing ribbon tendrils) ──
+function drawGhostOrchid(svg, NS, CX, CY, palette, uid) {
+  // Photosynthetic green aerial root stem
+  const root = document.createElementNS(NS, "path");
+  root.setAttribute("d", `M ${CX - 40} 290 Q ${CX - 20} ${CY + 140} ${CX} ${CY + 40}`);
+  root.setAttribute("stroke", palette.stem);
+  root.setAttribute("stroke-width", "4");
+  root.setAttribute("fill", "none");
+  root.setAttribute("stroke-linecap", "round");
+  svg.appendChild(root);
+
+  // Aerial root clasp
+  const rootClasp = document.createElementNS(NS, "path");
+  rootClasp.setAttribute("d", `M ${CX - 15} ${CY + 130} Q ${CX + 25} ${CY + 110} ${CX + 35} ${CY + 150}`);
+  rootClasp.setAttribute("stroke", palette.stem);
+  rootClasp.setAttribute("stroke-width", "2.5");
+  rootClasp.setAttribute("fill", "none");
+  svg.appendChild(rootClasp);
+
+  const orchidGroup = document.createElementNS(NS, "g");
+  orchidGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // Dorsal and lateral spreading sepals (translucent white & celadon)
+  const sepals = [
+    { d: `M ${CX} ${CY} Q ${CX - 15} ${CY - 40} ${CX} ${CY - 78} Q ${CX + 15} ${CY - 40} ${CX} ${CY} Z`, rot: 0 },
+    { d: `M ${CX} ${CY} Q ${CX - 45} ${CY - 20} ${CX - 72} ${CY - 24} Q ${CX - 40} ${CY + 8} ${CX} ${CY} Z`, rot: 0 },
+    { d: `M ${CX} ${CY} Q ${CX + 45} ${CY - 20} ${CX + 72} ${CY - 24} Q ${CX + 40} ${CY + 8} ${CX} ${CY} Z`, rot: 0 }
+  ];
+
+  sepals.forEach((s) => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", s.d);
+    p.setAttribute("fill", `url(#pGrad_${uid})`);
+    p.setAttribute("opacity", "0.85");
+    orchidGroup.appendChild(p);
   });
-  svg.appendChild(dpGroup);
+
+  // Characteristic frog-like lower lip (labellum) with two trailing curling ribbon tendrils
+  const lip = document.createElementNS(NS, "path");
+  lip.setAttribute("d", `M ${CX - 16} ${CY + 6} Q ${CX} ${CY + 22} ${CX + 16} ${CY + 6} C ${CX + 32} ${CY + 30} ${CX + 18} ${CY + 45} ${CX} ${CY + 40} C ${CX - 18} ${CY + 45} ${CX - 32} ${CY + 30} ${CX - 16} ${CY + 6} Z`);
+  lip.setAttribute("fill", `url(#aGrad_${uid})`);
+  lip.setAttribute("opacity", "0.95");
+  orchidGroup.appendChild(lip);
+
+  // Two long curling ribbon tendrils trailing downwards
+  const tendrilL = document.createElementNS(NS, "path");
+  tendrilL.setAttribute("d", `M ${CX - 12} ${CY + 38} Q ${CX - 38} ${CY + 65} ${CX - 48} ${CY + 95} Q ${CX - 35} ${CY + 115} ${CX - 22} ${CY + 110}`);
+  tendrilL.setAttribute("stroke", palette.petals[2] || "#ffffff");
+  tendrilL.setAttribute("stroke-width", "3");
+  tendrilL.setAttribute("fill", "none");
+  tendrilL.setAttribute("stroke-linecap", "round");
+  orchidGroup.appendChild(tendrilL);
+
+  const tendrilR = document.createElementNS(NS, "path");
+  tendrilR.setAttribute("d", `M ${CX + 12} ${CY + 38} Q ${CX + 38} ${CY + 65} ${CX + 48} ${CY + 95} Q ${CX + 35} ${CY + 115} ${CX + 22} ${CY + 110}`);
+  tendrilR.setAttribute("stroke", palette.petals[2] || "#ffffff");
+  tendrilR.setAttribute("stroke-width", "3");
+  tendrilR.setAttribute("fill", "none");
+  tendrilR.setAttribute("stroke-linecap", "round");
+  orchidGroup.appendChild(tendrilR);
+
+  // Small central column
+  const column = document.createElementNS(NS, "circle");
+  column.setAttribute("cx", CX);
+  column.setAttribute("cy", CY + 2);
+  column.setAttribute("r", "7");
+  column.setAttribute("fill", palette.center);
+  orchidGroup.appendChild(column);
+
+  svg.appendChild(orchidGroup);
+}
+
+// ── 12. CRIMSON DAHLIA (Dense geometric concentric multi-tiered quilled petals) ──
+function drawCrimsonDahlia(svg, NS, CX, CY, palette, uid) {
+  // Sturdy leafy stem
+  const stem = document.createElementNS(NS, "path");
+  stem.setAttribute("d", `M ${CX} ${CY + 45} L ${CX} 290`);
+  stem.setAttribute("stroke", palette.stem);
+  stem.setAttribute("stroke-width", "6.5");
+  stem.setAttribute("stroke-linecap", "round");
+  svg.appendChild(stem);
+
+  // Dahlia compound leaves
+  const dleaf1 = document.createElementNS(NS, "path");
+  dleaf1.setAttribute("d", `M ${CX - 3} ${CY + 130} Q ${CX - 50} ${CY + 100} ${CX - 65} ${CY + 135} Q ${CX - 35} ${CY + 160} ${CX - 3} ${CY + 145} Z`);
+  dleaf1.setAttribute("fill", palette.stem);
+  dleaf1.setAttribute("opacity", "0.9");
+  svg.appendChild(dleaf1);
+
+  const dleaf2 = document.createElementNS(NS, "path");
+  dleaf2.setAttribute("d", `M ${CX + 3} ${CY + 160} Q ${CX + 50} ${CY + 130} ${CX + 65} ${CY + 165} Q ${CX + 35} ${CY + 190} ${CX + 3} ${CY + 175} Z`);
+  dleaf2.setAttribute("fill", palette.stem);
+  dleaf2.setAttribute("opacity", "0.9");
+  svg.appendChild(dleaf2);
+
+  const dahliaGroup = document.createElementNS(NS, "g");
+  dahliaGroup.setAttribute("filter", `url(#glow_${uid})`);
+
+  // Dense concentric geometric tiers of quilled pointed petals
+  const tiers = [
+    { count: 18, dist: 56, w: 10, len: 44, op: 0.85 },
+    { count: 14, dist: 40, w: 9, len: 36, op: 0.9 },
+    { count: 10, dist: 25, w: 8, len: 28, op: 0.95 },
+    { count: 8, dist: 12, w: 7, len: 20, op: 1.0 }
+  ];
+
+  tiers.forEach((t, tIdx) => {
+    for (let i = 0; i < t.count; i++) {
+      const angle = (360 / t.count) * i + tIdx * 12;
+      const rad = (angle * Math.PI) / 180;
+      const px = CX + Math.cos(rad) * t.dist;
+      const py = CY + Math.sin(rad) * t.dist;
+
+      const petal = document.createElementNS(NS, "path");
+      // Geometric cupped pointed dahlia petal
+      petal.setAttribute("d", `M ${px - t.w} ${py} Q ${px} ${py - t.len} ${px + t.w} ${py} Q ${px} ${py + 6} ${px - t.w} ${py} Z`);
+      petal.setAttribute("fill", tIdx === 3 ? palette.accent : `url(#pGrad_${uid})`);
+      petal.setAttribute("opacity", t.op);
+      petal.setAttribute("transform", `rotate(${angle + 90}, ${px}, ${py})`);
+      dahliaGroup.appendChild(petal);
+    }
+  });
+
+  // Tight central button
+  const center = document.createElementNS(NS, "circle");
+  center.setAttribute("cx", CX);
+  center.setAttribute("cy", CY);
+  center.setAttribute("r", "12");
+  center.setAttribute("fill", `url(#cGrad_${uid})`);
+  dahliaGroup.appendChild(center);
+
+  svg.appendChild(dahliaGroup);
+}
+
+// ──────────────────────────────────────────────
+// 10. SVG FLOWER DISPATCHER
+// ──────────────────────────────────────────────
+
+let globalFlowerCounter = 0;
+
+/**
+ * Main dispatcher to render an SVG flower matching its distinct flowerType.
+ */
+function generateFlowerSVG(palette, flowerType = "marigold") {
+  globalFlowerCounter++;
+  const uid = `${Date.now().toString(36)}_${globalFlowerCounter}`;
+  const base = createBaseSVG(uid, palette);
+  const { svg, NS, CX, CY } = base;
+
+  switch (flowerType) {
+    case "marigold":
+      drawMarigold(svg, NS, CX, CY, palette, uid);
+      break;
+    case "rose":
+      drawRose(svg, NS, CX, CY, palette, uid);
+      break;
+    case "moonflower":
+      drawMoonflower(svg, NS, CX, CY, palette, uid);
+      break;
+    case "bluebell":
+      drawBluebell(svg, NS, CX, CY, palette, uid);
+      break;
+    case "sunflower":
+      drawSunflower(svg, NS, CX, CY, palette, uid);
+      break;
+    case "lavender":
+      drawLavender(svg, NS, CX, CY, palette, uid);
+      break;
+    case "white_lily":
+      drawWhiteLily(svg, NS, CX, CY, palette, uid);
+      break;
+    case "cherry_blossom":
+      drawCherryBlossom(svg, NS, CX, CY, palette, uid);
+      break;
+    case "forget_me_not":
+      drawForgetMeNot(svg, NS, CX, CY, palette, uid);
+      break;
+    case "nightshade":
+      drawNightshade(svg, NS, CX, CY, palette, uid);
+      break;
+    case "ghost_orchid":
+      drawGhostOrchid(svg, NS, CX, CY, palette, uid);
+      break;
+    case "crimson_dahlia":
+      drawCrimsonDahlia(svg, NS, CX, CY, palette, uid);
+      break;
+    default:
+      drawMarigold(svg, NS, CX, CY, palette, uid);
+  }
 
   return svg;
 }
 
 // ──────────────────────────────────────────────
-// 11. PARTICLE SYSTEM  (unchanged from v1)
+// 11. GALLERY THUMBNAIL RENDERER (Species-aware)
+// ──────────────────────────────────────────────
+
+/**
+ * Creates a lightweight 120x120 SVG thumbnail representing the specific flower species.
+ */
+function generateThumbnailSVG(palette, flowerType = "marigold") {
+  const NS = "http://www.w3.org/2000/svg";
+  const SIZE = 120;
+  const CX = SIZE / 2;
+  const CY = SIZE / 2;
+  const tid = `thumb_${Math.random().toString(36).slice(2, 7)}`;
+
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${SIZE} ${SIZE}`);
+  svg.setAttribute("width", SIZE);
+  svg.setAttribute("height", SIZE);
+  svg.setAttribute("aria-hidden", "true");
+
+  const defs = document.createElementNS(NS, "defs");
+
+  const pGrad = document.createElementNS(NS, "radialGradient");
+  pGrad.setAttribute("id", tid + "_p");
+  pGrad.setAttribute("cx", "50%");
+  pGrad.setAttribute("cy", "30%");
+  pGrad.setAttribute("r", "70%");
+  pGrad.innerHTML = `
+    <stop offset="0%" stop-color="${palette.petals[2] || palette.petals[0]}"/>
+    <stop offset="60%" stop-color="${palette.petals[1] || palette.petals[0]}" stop-opacity="0.95"/>
+    <stop offset="100%" stop-color="${palette.petals[0]}" stop-opacity="0.8"/>
+  `;
+
+  const glow = document.createElementNS(NS, "filter");
+  glow.setAttribute("id", tid + "_g");
+  glow.innerHTML = `<feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>`;
+
+  defs.appendChild(pGrad);
+  defs.appendChild(glow);
+  svg.appendChild(defs);
+
+  const g = document.createElementNS(NS, "g");
+  g.setAttribute("filter", `url(#${tid}_g)`);
+
+  if (flowerType === "sunflower") {
+    for (let i = 0; i < 18; i++) {
+      const a = (360 / 18) * i;
+      const r = (a * Math.PI) / 180;
+      const el = document.createElementNS(NS, "ellipse");
+      el.setAttribute("cx", CX + Math.cos(r) * 24);
+      el.setAttribute("cy", CY + Math.sin(r) * 24);
+      el.setAttribute("rx", "5");
+      el.setAttribute("ry", "16");
+      el.setAttribute("fill", `url(#${tid}_p)`);
+      el.setAttribute("transform", `rotate(${a + 90}, ${CX + Math.cos(r) * 24}, ${CY + Math.sin(r) * 24})`);
+      g.appendChild(el);
+    }
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", CX);
+    c.setAttribute("cy", CY);
+    c.setAttribute("r", "18");
+    c.setAttribute("fill", palette.center);
+    g.appendChild(c);
+  } else if (flowerType === "cherry_blossom" || flowerType === "forget_me_not") {
+    for (let i = 0; i < 5; i++) {
+      const a = (360 / 5) * i - 90;
+      const r = (a * Math.PI) / 180;
+      const el = document.createElementNS(NS, "circle");
+      el.setAttribute("cx", CX + Math.cos(r) * 16);
+      el.setAttribute("cy", CY + Math.sin(r) * 16);
+      el.setAttribute("r", "13");
+      el.setAttribute("fill", `url(#${tid}_p)`);
+      g.appendChild(el);
+    }
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", CX);
+    c.setAttribute("cy", CY);
+    c.setAttribute("r", "6");
+    c.setAttribute("fill", palette.center);
+    g.appendChild(c);
+  } else if (flowerType === "white_lily") {
+    for (let i = 0; i < 6; i++) {
+      const a = (360 / 6) * i - 90;
+      const r = (a * Math.PI) / 180;
+      const el = document.createElementNS(NS, "ellipse");
+      el.setAttribute("cx", CX + Math.cos(r) * 20);
+      el.setAttribute("cy", CY + Math.sin(r) * 20);
+      el.setAttribute("rx", "7");
+      el.setAttribute("ry", "25");
+      el.setAttribute("fill", `url(#${tid}_p)`);
+      el.setAttribute("transform", `rotate(${a + 90}, ${CX + Math.cos(r) * 20}, ${CY + Math.sin(r) * 20})`);
+      g.appendChild(el);
+    }
+  } else {
+    // Default multi-petal rosette (Marigold, Rose, Dahlia, etc.)
+    const count = flowerType === "crimson_dahlia" ? 16 : 10;
+    for (let i = 0; i < count; i++) {
+      const a = (360 / count) * i - 90;
+      const r = (a * Math.PI) / 180;
+      const el = document.createElementNS(NS, "ellipse");
+      el.setAttribute("cx", CX + Math.cos(r) * 18);
+      el.setAttribute("cy", CY + Math.sin(r) * 18);
+      el.setAttribute("rx", "8");
+      el.setAttribute("ry", "22");
+      el.setAttribute("fill", `url(#${tid}_p)`);
+      el.setAttribute("transform", `rotate(${a + 90}, ${CX + Math.cos(r) * 18}, ${CY + Math.sin(r) * 18})`);
+      g.appendChild(el);
+    }
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", CX);
+    c.setAttribute("cy", CY);
+    c.setAttribute("r", "10");
+    c.setAttribute("fill", palette.center);
+    g.appendChild(c);
+  }
+
+  svg.appendChild(g);
+  return svg;
+}
+
+// ──────────────────────────────────────────────
+// 12. PARTICLES BACKGROUND
 // ──────────────────────────────────────────────
 
 function initParticles() {
   const container = document.getElementById("particles-container");
+  if (!container) return;
   const PARTICLE_COUNT = 30;
-  const colors = ["#f77f00","#ffd700","#c77dff","#ff9f1c","#ffbf69","#9d4edd","#ffb347"];
+  const colors = ["#f77f00", "#ffd700", "#c77dff", "#ff9f1c", "#ffbf69", "#9d4edd", "#ffb347"];
 
   for (let i = 0; i < PARTICLE_COUNT; i++) createParticle(container, colors, true);
 
-  setInterval(function () {
+  setInterval(() => {
     if (container.children.length < PARTICLE_COUNT + 10) {
       createParticle(container, colors, false);
     }
@@ -560,13 +1731,13 @@ function initParticles() {
 }
 
 function createParticle(container, colors, randomStartY) {
-  const el  = document.createElement("div");
+  const el = document.createElement("div");
   el.classList.add("particle");
-  const size     = 2 + Math.random() * 5;
-  const color    = colors[Math.floor(Math.random() * colors.length)];
-  const left     = Math.random() * 100;
+  const size = 2 + Math.random() * 5;
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  const left = Math.random() * 100;
   const duration = 8 + Math.random() * 14;
-  const delay    = randomStartY ? Math.random() * -duration : 0;
+  const delay = randomStartY ? Math.random() * -duration : 0;
 
   el.style.cssText = `
     width:${size}px;height:${size}px;background:${color};
@@ -575,11 +1746,11 @@ function createParticle(container, colors, randomStartY) {
     box-shadow:0 0 ${size * 2}px ${color};opacity:0;
   `;
   container.appendChild(el);
-  el.addEventListener("animationend", function () { el.remove(); });
+  el.addEventListener("animationend", () => el.remove());
 }
 
 // ──────────────────────────────────────────────
-// 12. TOAST  (unchanged from v1)
+// 13. TOAST NOTIFICATIONS
 // ──────────────────────────────────────────────
 
 function showToast(message) {
@@ -590,19 +1761,16 @@ function showToast(message) {
   toast.classList.add("toast");
   toast.textContent = message;
   document.body.appendChild(toast);
-  setTimeout(function () { toast.classList.add("show"); }, 50);
-  setTimeout(function () {
+  setTimeout(() => toast.classList.add("show"), 50);
+  setTimeout(() => {
     toast.classList.remove("show");
-    setTimeout(function () { toast.remove(); }, 500);
+    setTimeout(() => toast.remove(), 500);
   }, 3000);
 }
 
-// ──────────────────────────────────────────────
-// 13. SHOW LOADING SPINNER IN FLOWER AREA
-// ──────────────────────────────────────────────
-
 function showFlowerLoading() {
   const canvas = document.getElementById("flower-canvas");
+  if (!canvas) return;
   canvas.innerHTML = `
     <div class="loading-petals" role="status" aria-label="Growing your flower…">
       <span></span><span></span><span></span>
@@ -615,24 +1783,27 @@ function showFlowerLoading() {
 // ──────────────────────────────────────────────
 
 /**
- * Renders the flower SVG and fills in the text fields.
- * Works with both AI output and fallback templates.
- * @param {object} template
- * @param {string} inputText
+ * Updates DOM to show flower illustration, name, type badge, emotional meaning, and poem.
  */
-function displayFlower(template, inputText) {
+function displayFlower(flowerData, inputText) {
+  currentFlowerData = flowerData;
+
   const canvas = document.getElementById("flower-canvas");
   canvas.innerHTML = "";
-  const svg = generateFlowerSVG(
-    template.palette,
-    inputText,
-    template.petalCountOverride   // undefined for fallback templates (ignored)
-  );
+  const svg = generateFlowerSVG(flowerData.palette, flowerData.flowerType);
   canvas.appendChild(svg);
 
-  document.getElementById("flower-name").textContent    = template.name;
-  document.getElementById("flower-meaning").textContent = template.meaning;
-  document.getElementById("flower-poem").textContent    = template.poem;
+  // Set titles and badge
+  document.getElementById("flower-name").textContent = flowerData.name;
+
+  const typeBadge = document.getElementById("flower-type-badge");
+  if (typeBadge) {
+    const spec = FLOWER_SPECIES[flowerData.flowerType] || FLOWER_SPECIES.marigold;
+    typeBadge.innerHTML = `<span class="badge-icon">✿</span> <span class="badge-text">${spec.displayName} · ${spec.symbolism}</span>`;
+  }
+
+  document.getElementById("flower-meaning").textContent = flowerData.meaning;
+  document.getElementById("flower-poem").textContent = flowerData.poem;
 
   const flowerSection = document.getElementById("flower-section");
   flowerSection.hidden = false;
@@ -640,7 +1811,7 @@ function displayFlower(template, inputText) {
 }
 
 // ──────────────────────────────────────────────
-// 15. SAVE AS PNG  (unchanged from v1)
+// 15. SAVE AS PNG
 // ──────────────────────────────────────────────
 
 function saveFlowerAsPNG() {
@@ -648,306 +1819,140 @@ function saveFlowerAsPNG() {
   if (!svgEl) return;
 
   const serialiser = new XMLSerializer();
-  const svgString  = serialiser.serializeToString(svgEl);
-  const svgBlob    = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-  const url        = URL.createObjectURL(svgBlob);
+  const svgString = serialiser.serializeToString(svgEl);
+  const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(svgBlob);
 
   const img = new Image();
   img.onload = function () {
     const canvas = document.createElement("canvas");
-    canvas.width = 600; canvas.height = 600;
+    canvas.width = 640;
+    canvas.height = 680;
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#0a0608";
-    ctx.fillRect(0, 0, 600, 600);
-    ctx.drawImage(img, 0, 0, 600, 600);
 
-    const flowerName = document.getElementById("flower-name").textContent;
+    // Dark background
+    ctx.fillStyle = "#0a0608";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw SVG
+    ctx.drawImage(img, 20, 20, 600, 600);
+
+    // Add Flower Name and Subtitle
+    const flowerName = document.getElementById("flower-name").textContent || "The Spirit Bloom";
+    const flowerType = currentFlowerData && currentFlowerData.flowerType
+      ? FLOWER_SPECIES[currentFlowerData.flowerType].displayName
+      : "Spirit Bloom";
+
     ctx.fillStyle = "#ffd700";
-    ctx.font = "bold 22px Georgia, serif";
+    ctx.font = "bold 22px 'Cinzel', serif";
     ctx.textAlign = "center";
-    ctx.fillText(flowerName, 300, 570);
+    ctx.fillText(flowerName, 320, 635);
+
+    ctx.fillStyle = "#c77dff";
+    ctx.font = "italic 14px 'Lato', sans-serif";
+    ctx.fillText(flowerType, 320, 660);
 
     const link = document.createElement("a");
-    link.download = "spirit-bloom.png";
+    link.download = `${flowerName.toLowerCase().replace(/[^a-z0-9]/g, "-")}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
     URL.revokeObjectURL(url);
-    showToast("✿ Your flower has been saved!");
+    showToast("✿ Your flower has been saved as an image!");
   };
   img.src = url;
 }
 
 // ──────────────────────────────────────────────
-// 16. MY BLOOMS GALLERY — localStorage layer
+// 16. GALLERY & LOCALSTORAGE CRUD
 // ──────────────────────────────────────────────
 
-// The key used to store the gallery array in localStorage.
 const STORAGE_KEY = "spiritBloom_gallery";
-
-// In-memory cache of the gallery, kept in sync with localStorage.
-// Each bloom is an object:
-// {
-//   id:       string  — unique id (timestamp-based)
-//   name:     string  — flower name
-//   meaning:  string  — emotional meaning
-//   poem:     string  — the poem
-//   palette:  object  — { center, petals[], stem, accent }
-//   petalCountOverride: number|undefined
-//   savedAt:  number  — Date.now() when saved
-// }
 let gallery = [];
 
-/**
- * Loads the gallery array from localStorage.
- * Silently discards any entries that are missing required fields
- * or that could not be parsed, so corrupted data never crashes the app.
- */
 function loadGallery() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) { gallery = []; return; }
-
+    if (!raw) {
+      gallery = [];
+      return;
+    }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) { gallery = []; return; }
+    if (!Array.isArray(parsed)) {
+      gallery = [];
+      return;
+    }
 
-    // Validate each entry; keep only well-formed ones
-    gallery = parsed.filter(function (item) {
+    gallery = parsed.filter((item) => {
       return (
         item &&
-        typeof item.id      === "string" &&
-        typeof item.name    === "string" && item.name.trim() !== "" &&
+        typeof item.id === "string" &&
+        typeof item.name === "string" &&
+        item.name.trim() !== "" &&
         typeof item.meaning === "string" &&
-        typeof item.poem    === "string" &&
+        typeof item.poem === "string" &&
         item.palette &&
         typeof item.palette.center === "string" &&
-        Array.isArray(item.palette.petals) && item.palette.petals.length >= 1
+        Array.isArray(item.palette.petals) &&
+        item.palette.petals.length >= 1
       );
     });
   } catch (err) {
-    // JSON.parse failed — wipe out corrupted data and start fresh
-    console.warn("[SpiritBloom] Gallery data corrupted; resetting.", err);
+    console.warn("[SpiritBloom] Gallery data corrupted, resetting:", err);
     gallery = [];
-    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (_) {}
   }
 }
 
-/**
- * Persists the current in-memory gallery array to localStorage.
- * Handles storage-quota errors without crashing.
- */
 function persistGallery() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(gallery));
   } catch (err) {
     console.warn("[SpiritBloom] Could not save to localStorage:", err);
-    showToast("⚠ Storage full — could not save the bloom.");
+    showToast("⚠ Storage full — could not save bloom to gallery.");
   }
 }
 
-/**
- * Adds the currently displayed flower to the gallery.
- * Reads its data from the live DOM so we don't have to pass anything in.
- * @returns {string|null} The new bloom's id, or null if nothing is displayed.
- */
 function addCurrentBloomToGallery() {
-  const name    = document.getElementById("flower-name").textContent.trim();
-  const meaning = document.getElementById("flower-meaning").textContent.trim();
-  const poem    = document.getElementById("flower-poem").textContent.trim();
+  if (!currentFlowerData) {
+    showToast("Please grow a flower first!");
+    return null;
+  }
 
-  // Nothing is displayed yet — bail out
-  if (!name) return null;
-
-  // Read the palette off the live SVG defs so we don't need a separate state variable
-  const palette = readPaletteFromSVG();
-  if (!palette) return null;
-
-  // Prevent exact duplicates (same name saved twice in a row)
-  const alreadySaved = gallery.some(function (b) { return b.name === name; });
+  const name = currentFlowerData.name;
+  const alreadySaved = gallery.some((b) => b.name === name);
   if (alreadySaved) {
     showToast("✦ This bloom is already in your gallery.");
     return null;
   }
 
   const bloom = {
-    id:                  Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    name:                name,
-    meaning:             meaning,
-    poem:                poem,
-    palette:             palette,
-    petalCountOverride:  readPetalCountFromSVG(),
-    savedAt:             Date.now(),
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    flowerType: currentFlowerData.flowerType || "marigold",
+    name: currentFlowerData.name,
+    meaning: currentFlowerData.meaning,
+    poem: currentFlowerData.poem,
+    palette: currentFlowerData.palette,
+    petalCountOverride: currentFlowerData.petalCountOverride,
+    savedAt: Date.now()
   };
 
-  gallery.unshift(bloom);   // newest first
+  gallery.unshift(bloom);
   persistGallery();
   return bloom.id;
 }
 
-/**
- * Removes a bloom from the gallery by id.
- * @param {string} id
- */
 function removeBloomFromGallery(id) {
-  gallery = gallery.filter(function (b) { return b.id !== id; });
+  gallery = gallery.filter((b) => b.id !== id);
   persistGallery();
 }
 
-// ── Helpers to read palette/petal-count back from the live SVG ──
-
-/**
- * Extracts the colour palette from the currently displayed SVG's <defs>.
- * This is simpler than maintaining a separate JS state variable.
- * @returns {object|null}
- */
-function readPaletteFromSVG() {
-  const svg = document.querySelector("#flower-canvas svg");
-  if (!svg) return null;
-
-  // Read gradient stops by id
-  function stopColor(gradId, index) {
-    const grad  = svg.querySelector("#" + gradId);
-    if (!grad) return "#c77dff";
-    const stops = grad.querySelectorAll("stop");
-    return stops[index] ? stops[index].getAttribute("stop-color") : "#c77dff";
-  }
-
-  // Stem colour from the <line> element
-  const stemEl  = svg.querySelector("line");
-  const stemColor = stemEl ? stemEl.getAttribute("stroke") : "#4a7c59";
-
-  // Accent colour from the first inner-group ellipse
-  const innerEllipses = svg.querySelectorAll("ellipse");
-  // The last batch of inner ellipses use the accent colour.
-  // They are drawn after the outer petals and have rx="10".
-  let accentColor = "#c77dff";
-  innerEllipses.forEach(function (el) {
-    if (el.getAttribute("rx") === "10") {
-      accentColor = el.getAttribute("fill") || "#c77dff";
-    }
-  });
-
-  return {
-    center: stopColor("centerGrad", 1),
-    petals: [
-      stopColor("petalGrad", 2),
-      stopColor("petalGrad", 1),
-      stopColor("petalGrad", 0),
-    ],
-    stem:   stemColor,
-    accent: accentColor,
-  };
-}
-
-/**
- * Counts the outer petals in the displayed SVG to recover petalCountOverride.
- * @returns {number}
- */
-function readPetalCountFromSVG() {
-  // Outer petals are inside the first <g filter="url(#glow)">
-  const glowGroup = document.querySelector("#flower-canvas svg g[filter]");
-  if (!glowGroup) return 8;
-  return glowGroup.querySelectorAll("ellipse").length;
-}
-
-// ──────────────────────────────────────────────
-// 17. GALLERY — SVG thumbnail generator
-// ──────────────────────────────────────────────
-
-/**
- * Creates a small (120×120) SVG thumbnail using just the petals and centre.
- * Simpler than the full flower — no animations, no stem.
- * @param {object} palette
- * @param {number} petalCount
- * @returns {SVGElement}
- */
-function generateThumbnailSVG(palette, petalCount) {
-  const NS   = "http://www.w3.org/2000/svg";
-  const SIZE = 120;
-  const CX   = SIZE / 2;
-  const CY   = SIZE / 2;
-  const count = Math.max(6, Math.min(12, petalCount || 8));
-
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${SIZE} ${SIZE}`);
-  svg.setAttribute("width",  SIZE);
-  svg.setAttribute("height", SIZE);
-  svg.setAttribute("aria-hidden", "true");
-
-  const defs = document.createElementNS(NS, "defs");
-
-  const pGrad = document.createElementNS(NS, "radialGradient");
-  pGrad.setAttribute("id", "tpg"); // thumbnail petal gradient
-  pGrad.setAttribute("cx", "50%"); pGrad.setAttribute("cy", "30%"); pGrad.setAttribute("r", "70%");
-  pGrad.innerHTML = `
-    <stop offset="0%"   stop-color="${palette.petals[2] || palette.petals[0]}"/>
-    <stop offset="60%"  stop-color="${palette.petals[1] || palette.petals[0]}" stop-opacity="0.9"/>
-    <stop offset="100%" stop-color="${palette.petals[0]}" stop-opacity="0.7"/>
-  `;
-
-  const cGrad = document.createElementNS(NS, "radialGradient");
-  cGrad.setAttribute("id", "tcg"); // thumbnail centre gradient
-  cGrad.setAttribute("cx", "40%"); cGrad.setAttribute("cy", "35%"); cGrad.setAttribute("r", "65%");
-  cGrad.innerHTML = `
-    <stop offset="0%"  stop-color="#fffde7"/>
-    <stop offset="40%" stop-color="${palette.center}"/>
-    <stop offset="100%" stop-color="${palette.petals[0]}" stop-opacity="0.8"/>
-  `;
-
-  const glow = document.createElementNS(NS, "filter");
-  glow.setAttribute("id", "tglow");
-  glow.innerHTML = `<feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>`;
-
-  defs.appendChild(pGrad); defs.appendChild(cGrad); defs.appendChild(glow);
-  svg.appendChild(defs);
-
-  // Outer petals
-  const pg = document.createElementNS(NS, "g");
-  pg.setAttribute("filter", "url(#tglow)");
-  for (let i = 0; i < count; i++) {
-    const angle = (360 / count) * i - 90;
-    const rad   = (angle * Math.PI) / 180;
-    const dist  = 18;
-    const px    = CX + Math.cos(rad) * dist;
-    const py    = CY + Math.sin(rad) * dist;
-    const el    = document.createElementNS(NS, "ellipse");
-    el.setAttribute("cx", px); el.setAttribute("cy", py);
-    el.setAttribute("rx", "8"); el.setAttribute("ry", "28");
-    el.setAttribute("fill", "url(#tpg)");
-    el.setAttribute("opacity", "0.88");
-    el.setAttribute("transform", `rotate(${angle + 90},${px},${py})`);
-    pg.appendChild(el);
-  }
-  svg.appendChild(pg);
-
-  // Centre
-  const centre = document.createElementNS(NS, "circle");
-  centre.setAttribute("cx", CX); centre.setAttribute("cy", CY);
-  centre.setAttribute("r", "13");
-  centre.setAttribute("fill", "url(#tcg)");
-  svg.appendChild(centre);
-
-  // Centre dot
-  const dot = document.createElementNS(NS, "circle");
-  dot.setAttribute("cx", CX); dot.setAttribute("cy", CY);
-  dot.setAttribute("r", "3"); dot.setAttribute("fill", "#fff"); dot.setAttribute("opacity", "0.9");
-  svg.appendChild(dot);
-
-  return svg;
-}
-
-// ──────────────────────────────────────────────
-// 18. GALLERY — render cards
-// ──────────────────────────────────────────────
-
-/**
- * Re-renders the entire gallery section from the in-memory gallery array.
- * Called after load, after save, and after delete.
- */
 function renderGallery() {
   const section = document.getElementById("gallery-section");
-  const grid    = document.getElementById("gallery-grid");
+  const grid = document.getElementById("gallery-grid");
+  if (!section || !grid) return;
 
-  // If gallery is empty, hide the whole section
   if (gallery.length === 0) {
     section.hidden = true;
     return;
@@ -956,18 +1961,18 @@ function renderGallery() {
   section.hidden = false;
   grid.innerHTML = "";
 
-  gallery.forEach(function (bloom) {
+  gallery.forEach((bloom) => {
     const card = document.createElement("div");
-    card.className    = "gallery-card";
-    card.role         = "listitem";
-    card.tabIndex     = 0;
+    card.className = "gallery-card";
+    card.role = "listitem";
+    card.tabIndex = 0;
     card.setAttribute("aria-label", "View saved bloom: " + bloom.name);
     card.dataset.bloomId = bloom.id;
 
     // Thumbnail SVG
     const thumbWrap = document.createElement("div");
     thumbWrap.className = "gallery-card__thumb";
-    const thumbSVG = generateThumbnailSVG(bloom.palette, bloom.petalCountOverride);
+    const thumbSVG = generateThumbnailSVG(bloom.palette, bloom.flowerType || "marigold");
     thumbWrap.appendChild(thumbSVG);
 
     // Card body
@@ -975,24 +1980,24 @@ function renderGallery() {
     body.className = "gallery-card__body";
 
     const cardName = document.createElement("p");
-    cardName.className   = "gallery-card__name";
+    cardName.className = "gallery-card__name";
     cardName.textContent = bloom.name;
 
-    // Colour swatches
+    // Swatches
     const swatches = document.createElement("div");
     swatches.className = "gallery-card__swatches";
     const swatchColors = [bloom.palette.center].concat(bloom.palette.petals.slice(0, 2));
-    swatchColors.forEach(function (color) {
+    swatchColors.forEach((color) => {
       const swatch = document.createElement("span");
       swatch.className = "swatch";
       swatch.style.background = color;
-      swatch.style.boxShadow  = "0 0 6px " + color + "88";
+      swatch.style.boxShadow = "0 0 6px " + color + "88";
       swatches.appendChild(swatch);
     });
 
-    // Saved date
+    // Date
     const date = document.createElement("p");
-    date.className   = "gallery-card__date";
+    date.className = "gallery-card__date";
     date.textContent = formatDate(bloom.savedAt);
 
     body.appendChild(cardName);
@@ -1003,182 +2008,197 @@ function renderGallery() {
     card.appendChild(body);
     grid.appendChild(card);
 
-    // Open modal on click or Enter/Space key
-    function openCard() { openBloomModal(bloom.id); }
+    function openCard() {
+      openBloomModal(bloom.id);
+    }
     card.addEventListener("click", openCard);
-    card.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openCard(); }
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openCard();
+      }
     });
   });
 }
 
-/** Formats a timestamp into a readable date string. */
 function formatDate(ts) {
   if (!ts) return "";
   try {
-    return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  } catch (_) { return ""; }
+    return new Date(ts).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+  } catch (_) {
+    return "";
+  }
 }
 
-// ──────────────────────────────────────────────
-// 19. GALLERY — bloom detail modal
-// ──────────────────────────────────────────────
-
-// Track which bloom is currently open so the delete button knows what to remove
 let activeModalBloomId = null;
 
-/**
- * Opens the modal and populates it with the saved bloom's data.
- * @param {string} id
- */
 function openBloomModal(id) {
-  const bloom = gallery.find(function (b) { return b.id === id; });
+  const bloom = gallery.find((b) => b.id === id);
   if (!bloom) return;
 
   activeModalBloomId = id;
 
-  // Render a full flower SVG inside the modal
   const modalCanvas = document.getElementById("modal-flower-canvas");
   modalCanvas.innerHTML = "";
-  const svg = generateFlowerSVG(bloom.palette, bloom.name, bloom.petalCountOverride);
+  const svg = generateFlowerSVG(bloom.palette, bloom.flowerType || "marigold");
   modalCanvas.appendChild(svg);
 
-  // Fill text
-  document.getElementById("modal-flower-name").textContent    = bloom.name;
-  document.getElementById("modal-flower-meaning").textContent = bloom.meaning;
-  document.getElementById("modal-flower-poem").textContent    = bloom.poem;
+  document.getElementById("modal-flower-name").textContent = bloom.name;
 
-  // Show modal
+  const modalBadge = document.getElementById("modal-flower-type-badge");
+  if (modalBadge) {
+    const spec = FLOWER_SPECIES[bloom.flowerType] || FLOWER_SPECIES.marigold;
+    modalBadge.innerHTML = `<span class="badge-icon">✿</span> <span class="badge-text">${spec.displayName} · ${spec.symbolism}</span>`;
+  }
+
+  document.getElementById("modal-flower-meaning").textContent = bloom.meaning;
+  document.getElementById("modal-flower-poem").textContent = bloom.poem;
+
   const backdrop = document.getElementById("modal-backdrop");
   backdrop.hidden = false;
   document.body.classList.add("modal-open");
-
-  // Focus the close button for accessibility
   document.getElementById("modal-close").focus();
 }
 
-/** Closes the modal without deleting anything. */
 function closeBloomModal() {
-  document.getElementById("modal-backdrop").hidden = true;
+  const backdrop = document.getElementById("modal-backdrop");
+  if (backdrop) backdrop.hidden = true;
   document.body.classList.remove("modal-open");
   activeModalBloomId = null;
 }
 
 // ──────────────────────────────────────────────
-// 20. MAIN — EVENT LISTENERS & STARTUP
+// 17. MAIN APP ORCHESTRATION & EVENT LISTENERS
 // ──────────────────────────────────────────────
 
-// DOM is always ready by the time a module script runs,
-// but wrapping in DOMContentLoaded is harmless and explicit.
-document.addEventListener("DOMContentLoaded", function () {
-
-  const memoryInput   = document.getElementById("memory-input");
-  const charCount     = document.getElementById("char-count");
-  const growBtn       = document.getElementById("grow-btn");
-  const newBtn        = document.getElementById("new-btn");
-  const saveBtn       = document.getElementById("save-btn");
+document.addEventListener("DOMContentLoaded", () => {
+  const memoryInput = document.getElementById("memory-input");
+  const charCount = document.getElementById("char-count");
+  const growBtn = document.getElementById("grow-btn");
+  const growAnotherBtn = document.getElementById("grow-another-btn");
+  const newBtn = document.getElementById("new-btn");
+  const saveBtn = document.getElementById("save-btn");
   const gallerySaveBtn = document.getElementById("gallery-save-btn");
   const flowerSection = document.getElementById("flower-section");
-  const inputSection  = document.getElementById("input-section");
+  const inputSection = document.getElementById("input-section");
 
-  // Modal elements
-  const modalBackdrop  = document.getElementById("modal-backdrop");
-  const modalClose     = document.getElementById("modal-close");
+  const modalBackdrop = document.getElementById("modal-backdrop");
+  const modalClose = document.getElementById("modal-close");
   const modalDeleteBtn = document.getElementById("modal-delete-btn");
 
-  // ── Particles ──
   initParticles();
-
-  // ── Load gallery from localStorage on startup, then render ──
   loadGallery();
   renderGallery();
 
-  // ── Start loading WebLLM in the background immediately ──
-  initWebLLM().catch(function (err) {
-    console.error("[SpiritBloom] Unexpected error during WebLLM init:", err);
-    setAIStatus("fallback", "AI model unavailable — using built-in flower library.");
+  // Initialize WebLLM in the background
+  initWebLLM().catch((err) => {
+    console.error("[SpiritBloom] Unexpected WebLLM error:", err);
+    setAIStatus("fallback", "AI model unavailable — using built-in 12 flower collection.");
   });
 
-  // ── Character counter ──
-  memoryInput.addEventListener("input", function () {
+  // Character counter
+  memoryInput.addEventListener("input", () => {
     charCount.textContent = memoryInput.value.length;
   });
 
-  // ── Grow My Flower ──
-  growBtn.addEventListener("click", async function () {
-    const text = memoryInput.value.trim();
+  // Central generation function (supports variation index)
+  async function growFlowerFromMemory(isVariation = false) {
+    const text = memoryInput.value.trim() || lastMemoryText;
 
-    if (text.length < 5) {
+    if (!text || text.length < 5) {
       showToast("✦ Please share a little more to grow your flower…");
       memoryInput.focus();
       return;
     }
 
+    lastMemoryText = text;
+
+    if (isVariation) {
+      memoryVariationIndex++;
+    } else {
+      memoryVariationIndex = 0;
+    }
+
     growBtn.disabled = true;
+    if (growAnotherBtn) growAnotherBtn.disabled = true;
     growBtn.innerHTML = '<span class="btn-icon" style="animation:spin-pulse 1s linear infinite">✿</span> Growing…';
 
     flowerSection.hidden = false;
     showFlowerLoading();
     flowerSection.scrollIntoView({ behavior: "smooth", block: "start" });
 
-    let template;
+    let flowerData;
 
-    if (aiMode === "ai" && engine !== null) {
+    if (aiMode === "ai" && engine !== null && !isVariation) {
       try {
-        template = await runAIInference(text);
+        flowerData = await runAIInference(text);
       } catch (inferErr) {
-        console.error("[SpiritBloom] Inference error:", inferErr);
-        setAIStatus("fallback", "⚠ AI inference failed — using built-in flower library for this bloom.");
-        template = pickFallbackTemplate(text);
+        console.warn("[SpiritBloom] AI inference failed, switching to local species engine:", inferErr);
+        setAIStatus("fallback", "AI response failed — generated using rich botanical collection.");
+        flowerData = createLocalFlower(text, memoryVariationIndex);
       }
     } else {
-      await new Promise(function (resolve) { setTimeout(resolve, 900); });
-      template = pickFallbackTemplate(text);
+      // Local emotional analyzer with controlled variation
+      await new Promise((r) => setTimeout(r, 700));
+      flowerData = createLocalFlower(text, memoryVariationIndex);
     }
 
-    displayFlower(template, text);
+    displayFlower(flowerData, text);
 
     growBtn.disabled = false;
+    if (growAnotherBtn) growAnotherBtn.disabled = false;
     growBtn.innerHTML = '<span class="btn-icon">✿</span> Grow My Flower';
-  });
+  }
 
-  // ── Create Another ──
-  newBtn.addEventListener("click", function () {
-    memoryInput.value     = "";
+  // Grow My Flower button
+  growBtn.addEventListener("click", () => growFlowerFromMemory(false));
+
+  // Grow Another Bloom button
+  if (growAnotherBtn) {
+    growAnotherBtn.addEventListener("click", () => {
+      growFlowerFromMemory(true);
+      showToast("✦ Exploring another bloom variation for your memory…");
+    });
+  }
+
+  // Create Another button
+  newBtn.addEventListener("click", () => {
+    memoryInput.value = "";
     charCount.textContent = "0";
-    flowerSection.hidden  = true;
+    lastMemoryText = "";
+    memoryVariationIndex = 0;
+    flowerSection.hidden = true;
     inputSection.scrollIntoView({ behavior: "smooth", block: "start" });
     memoryInput.focus();
   });
 
-  // ── Save as Image (PNG download) ──
-  saveBtn.addEventListener("click", function () {
-    saveFlowerAsPNG();
-  });
+  // Save as image
+  saveBtn.addEventListener("click", saveFlowerAsPNG);
 
-  // ── Save to My Blooms gallery ──
-  gallerySaveBtn.addEventListener("click", function () {
+  // Save to gallery
+  gallerySaveBtn.addEventListener("click", () => {
     const id = addCurrentBloomToGallery();
     if (id) {
       renderGallery();
       showToast("✿ Bloom saved to your gallery!");
-      // Scroll to the gallery so the user sees it appear
-      setTimeout(function () {
-        document.getElementById("gallery-section").scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 400);
+      setTimeout(() => {
+        const gal = document.getElementById("gallery-section");
+        if (gal) gal.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 350);
     }
   });
 
-  // ── Modal: close button ──
+  // Modal interactions
   modalClose.addEventListener("click", closeBloomModal);
-
-  // ── Modal: click outside the box to close ──
-  modalBackdrop.addEventListener("click", function (e) {
+  modalBackdrop.addEventListener("click", (e) => {
     if (e.target === modalBackdrop) closeBloomModal();
   });
 
-  // ── Modal: delete button ──
-  modalDeleteBtn.addEventListener("click", function () {
+  modalDeleteBtn.addEventListener("click", () => {
     if (!activeModalBloomId) return;
     removeBloomFromGallery(activeModalBloomId);
     closeBloomModal();
@@ -1186,8 +2206,8 @@ document.addEventListener("DOMContentLoaded", function () {
     showToast("Bloom removed from your gallery.");
   });
 
-  // ── Keyboard: Escape closes modal, Ctrl/Cmd+Enter grows ──
-  document.addEventListener("keydown", function (e) {
+  // Keyboard accessibility
+  document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !modalBackdrop.hidden) {
       closeBloomModal();
       return;

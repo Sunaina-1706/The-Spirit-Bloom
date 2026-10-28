@@ -1,0 +1,12 @@
+{
+  "name": "spirit-bloom",
+  "version": "1.0.0",
+  "description": "The Spirit Bloom - A digital flower remembrance web application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

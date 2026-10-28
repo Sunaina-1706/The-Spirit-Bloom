@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Spirit Bloom</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Floating particles background -->
+  <div id="particles-container" aria-hidden="true"></div>
+
+  <!-- Candles decoration -->
+  <div class="candles" aria-hidden="true">
+    <div class="candle candle-left">
+      <div class="candle-body"></div>
+      <div class="flame">
+        <div class="flame-inner"></div>
+      </div>
+    </div>
+    <div class="candle candle-right">
+      <div class="candle-body"></div>
+      <div class="flame">
+        <div class="flame-inner"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-wrapper">
+
+    <!-- ── HEADER ── -->
+    <header class="site-header">
+      <div class="marigold-icon" aria-hidden="true">✿</div>
+      <h1 class="site-title">The Spirit Bloom</h1>
+      <p class="site-subtitle">Every memory leaves a flower behind.</p>
+    </header>
+
+    <!-- ── AI STATUS BANNER ──
+         Updated by script.js to reflect whether real AI or fallback is active -->
+    <div id="ai-status-banner" class="ai-banner ai-banner--loading" role="status" aria-live="polite">
+      <span class="ai-banner__icon">◌</span>
+      <span id="ai-status-text">Preparing the spirit engine…</span>
+    </div>
+
+    <!-- ── MODEL LOADING PROGRESS ──
+         Only visible while WebLLM is downloading the model for the first time -->
+    <div id="model-progress-wrap" class="model-progress-wrap" hidden>
+      <p class="model-progress-label" id="model-progress-label">Loading model…</p>
+      <div class="model-progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+        <div class="model-progress-bar" id="model-progress-bar"></div>
+      </div>
+      <p class="model-progress-hint">
+        The model downloads once and is cached in your browser for future visits.
+      </p>
+    </div>
+
+    <!-- ── INPUT SECTION ── -->
+    <section class="input-section" id="input-section">
+      <label for="memory-input" class="input-label">
+        Share a memory, dream, or feeling…
+      </label>
+      <textarea
+        id="memory-input"
+        class="memory-textarea"
+        placeholder="Write about something you remember — a person, a place, a scent, a moment of joy or grief. Let it bloom…"
+        maxlength="600"
+        aria-label="Write your memory, dream, or feeling here"
+      ></textarea>
+      <div class="char-counter"><span id="char-count">0</span> / 600</div>
+
+      <!-- Privacy notice — only shown when local AI is confirmed ready -->
+      <p class="privacy-notice" id="privacy-notice" hidden>
+        🔒 Your memory is interpreted <strong>entirely in your browser</strong>. Nothing is sent to any server.
+      </p>
+
+      <button class="btn btn-grow" id="grow-btn" aria-label="Grow my flower">
+        <span class="btn-icon">✿</span> Grow My Flower
+      </button>
+    </section>
+
+    <!-- ── FLOWER DISPLAY SECTION ── -->
+    <section class="flower-section" id="flower-section" aria-live="polite" hidden>
+
+      <div class="flower-stage">
+        <!-- SVG flower is injected here by script.js -->
+        <div id="flower-canvas"></div>
+      </div>
+
+      <div class="flower-info">
+        <div class="divider" aria-hidden="true">· · ✦ · ·</div>
+
+        <h2 class="flower-name" id="flower-name"></h2>
+
+        <p class="flower-meaning-label">Emotional Meaning</p>
+        <p class="flower-meaning" id="flower-meaning"></p>
+
+        <blockquote class="flower-poem" id="flower-poem"></blockquote>
+
+        <div class="divider" aria-hidden="true">· · ✦ · ·</div>
+
+        <div class="action-buttons">
+          <button class="btn btn-secondary" id="new-btn" aria-label="Create another flower">
+            ↺ Create Another
+          </button>
+          <button class="btn btn-gallery-save" id="gallery-save-btn" aria-label="Save to My Blooms gallery">
+            ✿ Save to My Blooms
+          </button>
+          <button class="btn btn-save" id="save-btn" aria-label="Download flower as image">
+            ↓ Save as Image
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ── MY BLOOMS GALLERY ──
+         Populated by script.js from localStorage.
+         Hidden when empty (CSS handles this via :empty / the .gallery-empty class). -->
+    <section class="gallery-section" id="gallery-section" aria-label="My Blooms gallery" hidden>
+
+      <div class="gallery-header">
+        <h2 class="gallery-title">✿ My Blooms</h2>
+        <p class="gallery-subtitle">Flowers saved from your memories.</p>
+      </div>
+
+      <!-- Cards are injected here by renderGallery() -->
+      <div class="gallery-grid" id="gallery-grid" role="list"></div>
+
+    </section>
+
+    <!-- ── BLOOM DETAIL MODAL ──
+         Opens when a gallery card is clicked.
+         Closed by the X button, clicking the backdrop, or pressing Escape. -->
+    <div class="modal-backdrop" id="modal-backdrop" hidden aria-modal="true" role="dialog" aria-label="Saved bloom detail">
+      <div class="modal-box">
+        <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+
+        <div class="modal-flower-canvas" id="modal-flower-canvas"></div>
+
+        <div class="modal-info">
+          <div class="divider" aria-hidden="true">· · ✦ · ·</div>
+          <h3 class="flower-name" id="modal-flower-name"></h3>
+          <p class="flower-meaning-label">Emotional Meaning</p>
+          <p class="flower-meaning" id="modal-flower-meaning"></p>
+          <blockquote class="flower-poem" id="modal-flower-poem"></blockquote>
+          <div class="divider" aria-hidden="true">· · ✦ · ·</div>
+
+          <div class="action-buttons">
+            <button class="btn btn-secondary" id="modal-delete-btn" aria-label="Remove this bloom from gallery">
+              ✕ Remove Bloom
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── FOOTER ── -->
+    <footer class="site-footer">
+      <p>Made with love &amp; candlelight · <em>Día de los Muertos</em></p>
+    </footer>
+
+  </div><!-- /.app-wrapper -->
+
+  <!--
+    type="module" is required so we can use ES module `import` inside script.js
+    to load WebLLM from the CDN.
+  -->
+  <script type="module" src="script.js"></script>
+</body>
+</html>

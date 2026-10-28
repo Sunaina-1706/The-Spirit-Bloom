@@ -38,7 +38,7 @@ Make sure you have installed:
 1. Clone this repository:
 
    ```bash
-   git clone https://github.com/YOUR_USERNAME/spirit-bloom.git
+   git clone https://github.com/Sunaina-1706/spirit-bloom.git
    ```
 
 2. Navigate to the project directory:

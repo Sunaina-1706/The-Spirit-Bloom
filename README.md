@@ -2,114 +2,108 @@
 
 **Every memory leaves a flower behind.**
 
-The Spirit Bloom is a mystical, AI-powered web application that transforms personal memories, dreams, and feelings into unique digital flowers. Inspired by the beauty of marigolds, Día de los Muertos, and the emotional connection between memories and nature, the project turns words into a personalized visual experience.
+The Spirit Bloom is an interactive digital art experience and emotional memory sanctuary inspired by Día de los Muertos, marigolds (*cempasúchil*), and the spirit of remembrance. It transforms personal memories, dreams, and feelings into 12 distinct procedural digital flowers with personalized symbolism and poetry.
 
-## ✨ Features
+Repository: **[https://github.com/Sunaina-1706/The-Spirit-Bloom](https://github.com/Sunaina-1706/The-Spirit-Bloom)**
 
-- 🌸 **AI-Powered Flower Generation** — Transform memories and emotions into personalized flower concepts.
-- 🎨 **Dynamic Flower Visuals** — Generate unique flowers with different petal shapes, colors, and styles.
-- 📝 **Personalized Poetry** — Receive a short poem inspired by the emotion behind your memory.
-- 🕯️ **Mystical User Interface** — Explore a dark, atmospheric design with glowing effects and smooth animations.
-- 💾 **Personal Flower Gallery** — Save and revisit your created blooms.
-- 📱 **Responsive Design** — Designed to work on desktop and mobile devices.
+---
+
+## ✨ Key Features
+
+- 🌸 **12 Unique Procedural Flower Species** — Genuinely distinct anatomical visual models with species-specific petal shapes, multi-tier arrangements, custom centers, and foliage:
+  1. **Marigold (`cempasúchil`)** — Dense, ruffled multi-tiered scalloped petals & feathery leaves (*Remembrance & Warmth*)
+  2. **Rose (`rose`)** — Overlapping cup petals and central bud spiral whorl (*Love & Longing*)
+  3. **Moonflower (`moonflower`)** — Luminous circular fluted star-disc with starlight ribs (*Mystery & Dreams*)
+  4. **Bluebell (`bluebell`)** — Gracefully nodding arched raceme with hanging bell florets (*Nostalgia & Humility*)
+  5. **Sunflower (`sunflower`)** — Giant dark seed disc with phyllotaxis spiral dots & 26 golden ray petals (*Joy & Hope*)
+  6. **Lavender (`lavender`)** — Slender upright spike with 7 tiered whorls of tubular florets (*Peace & Healing*)
+  7. **White Lily (`white_lily`)** — 6 reflexed pointed tepals with 6 protruding anther stamens (*Purity & Remembrance*)
+  8. **Cherry Blossom (`cherry_blossom`)** — 5 notched petals with distinct V-clefts & central stamen ring (*Fleeting Moments & Change*)
+  9. **Forget-me-not (`forget_me_not`)** — 5 rounded sky-blue petals with pentagonal yellow eye (*Cherished Memories*)
+  10. **Nightshade Fantasy (`nightshade`)** — 5 reflexed star petals with forward golden beak cone (*Mystery & Transformation*)
+  11. **Ghost Orchid (`ghost_orchid`)** — Translucent sepals with frog-like labellum & long trailing ribbon tendrils (*Solitude & The Unknown*)
+  12. **Crimson Dahlia (`crimson_dahlia`)** — Geometric rosette with 4 tiers of quilled pointed petals (*Strength & Resilience*)
+
+- 🧠 **Dual Engine: WebLLM In-Browser AI & Local Contextual Analyzer**:
+  - **In-Browser WebGPU AI**: Interprets the memory with client-side LLM inference (`Qwen2.5-0.5B`) without any API keys or servers.
+  - **Smart Local Fallback**: Comprehensive emotional keyword and context analyzer matching memories to appropriate candidate species with 100% offline reliability.
+- ✦ **"Grow Another Bloom" Variation**:
+  - Cycle through alternative suitable candidate species and distinct poetry variations for the same memory without having to retype.
+- 📝 **Dynamic Poetry & Evocative Titles**:
+  - Composes original 4-line verses and poetic Spanish/English titles tailored to the emotion, imagery, and species.
+- 🕯️ **Atmospheric Día de los Muertos Aesthetic**:
+  - Obsidian and deep purple backdrop, floating glowing embers, and animated candle flames.
+- 💾 **"My Blooms" Gallery**:
+  - Saved in browser `localStorage` with species-specific mini SVG thumbnails.
+  - Click any card to open a full modal inspection with zoom, emotional meaning, and poem.
+- 🖼️ **Save as Image**:
+  - Export any flower as a high-resolution PNG image with title and species attribution.
+- 🔒 **100% Private & Local**:
+  - Memories are processed directly in your browser. Nothing is sent to any external server or saved unless you explicitly save the flower to your local gallery.
+
+---
 
 ## 🛠️ Tech Stack
 
-- **HTML5** — Application structure
-- **CSS3** — Styling, animations, and responsive layout
-- **JavaScript** — Interactive functionality and flower generation
-- **Node.js** — Server-side JavaScript runtime
-- **Express.js** — Local web server
-- **SVG** — Dynamic flower illustrations
-- **WebLLM** — Browser-based AI inference, if enabled in the current version
-- **LocalStorage** — Local persistence for saved flowers, if enabled
+- **Frontend**: HTML5, Vanilla JavaScript (ES Modules), CSS3, Procedural SVG
+- **Backend / Server**: Node.js, Express.js (static serving over HTTP)
+- **AI Inference**: WebLLM (`@mlc-ai/web-llm` via CDN, WebGPU hardware acceleration)
+- **Storage**: Browser `localStorage` (client-side only, no external database required)
+
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-Make sure you have installed:
+- [Node.js](https://nodejs.org/) (version 18+ recommended)
+- npm (bundled with Node.js)
 
-- [Node.js](https://nodejs.org/)
-- npm (included with Node.js)
+### Installation & Run
 
-### Installation
-
-1. Clone this repository:
-
+1. Clone the repository:
    ```bash
-   git clone https://github.com/Sunaina-1706/spirit-bloom.git
+   git clone https://github.com/Sunaina-1706/The-Spirit-Bloom.git
    ```
 
-2. Navigate to the project directory:
-
+2. Navigate into the directory:
    ```bash
-   cd spirit-bloom
+   cd The-Spirit-Bloom
    ```
 
-3. Install the dependencies:
-
+3. Install dependencies:
    ```bash
    npm install
    ```
 
-4. Start the development server:
-
+4. Start the server:
    ```bash
    npm start
    ```
 
 5. Open your browser and visit:
-
    ```text
    http://localhost:3000
    ```
 
-## 🌷 How It Works
-
-1. **Share a memory:** Enter a memory, dream, or feeling.
-2. **Grow your flower:** Submit your text to generate a flower concept.
-3. **Discover its meaning:** Explore the flower's name, emotional interpretation, and accompanying poem.
-4. **Save your bloom:** Keep your favorite creations in your personal gallery, if the gallery feature is enabled.
+---
 
 ## 📁 Project Structure
 
 ```text
-spirit-bloom/
-├── server.js       # Express server
-├── package.json    # Project configuration and dependencies
-├── index.html      # Main webpage
-├── style.css       # Styling and animations
-├── script.js       # Frontend interactions and flower logic
-└── README.md       # Project documentation
+The-Spirit-Bloom/
+├── server.js          # Express server for HTTP static serving
+├── package.json       # Project dependencies and npm start script
+├── package-lock.json  # Dependency lockfile
+├── index.html         # Main app layout, stage, and gallery modal
+├── style.css          # Dark mystical theme, candle animations, and card grid
+├── script.js          # 12 SVG renderers, WebLLM integration, emotional analyzer
+├── .gitignore         # Excludes node_modules and logs
+└── README.md          # Project documentation
 ```
-
-Additional files may be present depending on the AI integration and project configuration.
-
-## 🔮 Project Vision
-
-The Spirit Bloom explores how artificial intelligence can combine creativity, emotional expression, and interactive visual design. Each bloom represents a unique interpretation of a personal memory, turning something intangible into a flower that can be seen and remembered.
-
-## 🔒 Privacy
-
-Personal memories should be treated with care. Review the application's current AI processing and storage implementation before entering sensitive information. If local browser inference is enabled, memory processing can remain on the device; external AI services, if added, may handle data differently.
-
-## 🗺️ Future Improvements
-
-- More flower varieties and artistic styles
-- Additional visual themes inspired by Día de los Muertos
-- Download generated flowers as images
-- Improved personalization and emotion interpretation
-- Optional export and import of saved flower collections
-
-## 🤝 Contributing
-
-Suggestions, bug reports, and improvements are welcome. Feel free to fork the repository and submit a pull request.
-
-## 📄 License
-
-This project is currently available under the license specified in the repository. Add a `LICENSE` file if you intend to distribute it under an open-source license.
 
 ---
 
-**Made with creativity, code, and a little bit of magic. 🌼**
+## 📄 License
+
+This project is created for personal, educational, and creative remembrance. Feel free to explore and build upon it!
